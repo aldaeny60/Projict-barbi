@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { getProductDetail } from "@/lib/server-queries";
 import { adminUnauthorized, isAdminAuthed } from "@/lib/admin-auth";
+import { adminActor, logAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
   if (body.isNew !== undefined) patch.isNew = Boolean(body.isNew);
   const [row] = await db.update(products).set(patch).where(eq(products.id, numId)).returning();
+  await logAudit(adminActor(req), "product.update", `product:${numId}`, {
+    fields: Object.keys(patch),
+  });
   return Response.json({ product: row });
 }
 
@@ -43,5 +47,6 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   const numId = Number(id);
   if (!Number.isFinite(numId)) return Response.json({ error: "معرّف غير صالح" }, { status: 400 });
   await db.delete(products).where(eq(products.id, numId));
+  await logAudit(adminActor(req), "product.delete", `product:${numId}`, {});
   return Response.json({ deleted: true });
 }

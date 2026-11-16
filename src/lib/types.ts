@@ -85,6 +85,9 @@ export type CouponDTO = {
   description: string | null;
   active: boolean;
   expiresAt: string | null;
+  /** تظهر للإدارة فقط — null يعني بلا حد */
+  maxUses?: number | null;
+  usedCount?: number;
 };
 
 export type DeliveryFeeDTO = {

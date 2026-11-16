@@ -1,9 +1,12 @@
 import { db } from "@/db";
-import { branches, orderItems, orders, products } from "@/db/schema";
+import { branches, coupons, orderItems, orders, products } from "@/db/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { getCouponDiscount, nextOrderCode } from "@/lib/order-utils";
+import { ipOf, logAudit } from "@/lib/audit";
 import { checkRateLimit, clientKey, rateLimited } from "@/lib/rate-limit";
+import { isSameOrigin, staffAtLeast, staffFromRequest } from "@/lib/session";
+import { sendSms } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -18,16 +21,30 @@ type PosPayment = { method: string; amount: number };
 export async function POST(req: NextRequest) {
   const rl = checkRateLimit(clientKey(req, "pos-sale"), 120, 60_000);
   if (!rl.allowed) return rateLimited(rl.retryAfterSec);
+  if (!isSameOrigin(req)) return Response.json({ error: "طلب غير موثوق" }, { status: 403 });
+
+  // البيع يتطلب وردية مفتوحة بجلسة موقّعة — الاسم/الفرع من الجلسة لا من جسم الطلب
+  const session = staffAtLeast(req, "cashier");
+  if (!session) {
+    return Response.json({ error: "افتح وردية أولاً — البيع يتطلب جلسة كاشير" }, { status: 401 });
+  }
   try {
     const body = await req.json();
-    const branchId = Number(body.branchId) || 1;
-    const shiftId = body.shiftId ? Number(body.shiftId) : null;
-    const staffName = String(body.staffName ?? "كاشير");
+    const branchId = session.branchId;
+    const shiftId = session.shiftId;
+    const staffName = session.staffName;
     const rawItems = (body.items ?? []) as PosLine[];
     const payments = (body.payments ?? []) as PosPayment[];
     const manual = body.discount as { mode?: string; value?: number } | undefined;
 
     if (!rawItems.length) return Response.json({ error: "أضف منتجات للفاتورة أولاً" }, { status: 400 });
+
+    // الخصم اليدوي صلاحية مشرف/مدير — الكاشير لا يخصم بنفسه
+    if (manual?.value) {
+      if (!staffAtLeast(req, "supervisor")) {
+        return Response.json({ error: "الخصم اليدوي يتطلب صلاحية مشرف" }, { status: 403 });
+      }
+    }
 
     const ids = [...new Set(rawItems.map((i) => Number(i.productId)).filter(Boolean))];
     const rows = await db.select().from(products).where(inArray(products.id, ids));
@@ -57,7 +74,8 @@ export async function POST(req: NextRequest) {
         : Math.round(Number(manual.value))
       : 0;
     const afterManual = Math.max(0, subtotal - Math.min(manualDiscount, subtotal));
-    const { discount: couponDiscount } = await getCouponDiscount(body.couponCode ?? null, afterManual);
+    const coupon = await getCouponDiscount(body.couponCode ?? null, afterManual);
+    const couponDiscount = coupon.discount;
     const discountTotal = Math.min(manualDiscount + couponDiscount, subtotal);
     const total = subtotal - discountTotal;
 
@@ -107,6 +125,13 @@ export async function POST(req: NextRequest) {
           })
           .returning();
         await tx.insert(orderItems).values(lines.map((l) => ({ ...l, orderId: ord.id })));
+        // استهلاك الكوبون في نفس المعاملة — يحفظ حد الاستخدام موحّداً بين الويب والكاشير
+        if (couponDiscount > 0 && coupon.coupon) {
+          await tx
+            .update(coupons)
+            .set({ usedCount: sql`${coupons.usedCount} + 1` })
+            .where(eq(coupons.id, coupon.coupon.id));
+        }
         return ord;
       });
     } catch (e) {
@@ -115,6 +140,21 @@ export async function POST(req: NextRequest) {
       }
       throw e;
     }
+
+    // إشعار SMS حقيقي عند وجود رقم — والحالة تُبلَّغ كما هي بلا ادعاء
+    const smsStatus = body.phone
+      ? await sendSms(
+          String(body.phone),
+          `باربي ${branch?.name ?? ""}: فاتورتك ${code} بقيمة ${total.toLocaleString("en-US")} د.ع. شكراً لتسوقك معنا!`
+        )
+      : null;
+
+    await logAudit({ actor: staffName, role: session.role, ip: ipOf(req) }, "pos.sale", `order:${order.id}`, {
+      code,
+      total,
+      branchId,
+      payments: cleanPayments.map((p) => p.method),
+    });
 
     return Response.json({
       ok: true,
@@ -132,7 +172,17 @@ export async function POST(req: NextRequest) {
         createdAt: order.createdAt.toISOString(),
       },
       notifications: body.phone
-        ? { sms: true, whatsapp: true, message: `باربي ${branch?.name ?? ""}: فاتورتك ${code} بقيمة ${total.toLocaleString("en-US")} د.ع. شكراً لتسوقك معنا!` }
+        ? {
+            sms: smsStatus,
+            whatsapp: "link",
+            message: `باربي: فاتورتك ${code} بقيمة ${total.toLocaleString("en-US")} د.ع.`,
+            reason:
+              smsStatus === "skipped"
+                ? "مزود SMS غير مهيّأ — أرسل الفاتورة عبر واتساب"
+                : smsStatus === "failed"
+                  ? "تعذر إرسال SMS — أرسل الفاتورة عبر واتساب"
+                  : undefined,
+          }
         : null,
     });
   } catch (err) {
@@ -141,14 +191,25 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** GET ?branchId=&take= — latest POS sales (for returns) */
+/**
+ * GET ?branchId=&take= — آخر فواتير الكاشير (للمرتجعات).
+ * تتطلب جلسة كاشير، وتُقيَّد بفرع الجلسة: لا يرى كاشير فرعٍ فواتير فرع آخر.
+ */
 export async function GET(req: NextRequest) {
+  const session = staffFromRequest(req);
+  if (!session) {
+    return Response.json({ error: "افتح وردية أولاً لعرض الفواتير" }, { status: 401 });
+  }
   const sp = req.nextUrl.searchParams;
-  const branchId = Number(sp.get("branchId")) || undefined;
+  const requested = Number(sp.get("branchId")) || session.branchId;
+  const branchId = requested === session.branchId ? requested : session.branchId;
   const take = Math.min(Number(sp.get("take")) || 20, 50);
-  const rows = branchId
-    ? await db.select().from(orders).where(eq(orders.branchId, branchId)).orderBy(desc(orders.createdAt)).limit(take)
-    : await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(take);
+  const rows = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.branchId, branchId))
+    .orderBy(desc(orders.createdAt))
+    .limit(take);
   const posRows = rows.filter((r) => r.source === "pos");
   const ids = posRows.map((r) => r.id);
   const items = ids.length

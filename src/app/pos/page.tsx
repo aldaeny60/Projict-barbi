@@ -58,6 +58,7 @@ export default function PosPage() {
   const [products, setProducts] = useState<ProductDTO[]>([]);
   const [cats, setCats] = useState<CategoryDTO[]>([]);
   const [branches, setBranches] = useState<BranchDTO[]>([]);
+  const [posStaff, setPosStaff] = useState<{ id: number; name: string; role: string }[]>([]);
   const [branchId, setBranchId] = useState(1);
   const [shift, setShift] = useState<ShiftDTO | null>(null);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
@@ -116,6 +117,7 @@ export default function PosPage() {
       const d = await r.json();
       setShift(d.shift);
       setBranches(d.branches ?? []);
+      setPosStaff(d.staff ?? []);
     } catch { /* offline */ }
   }, []);
 
@@ -562,10 +564,27 @@ export default function PosPage() {
       <Modal open={showShift} onClose={() => setShowShift(false)}>
         <ShiftForm
           shift={shift}
-          onOpen={async (staffName, role, openingCash) => {
-            const r = await fetch("/api/pos/shift", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "open", branchId, staffName, role, openingCash }) });
-            const d = await r.json();
-            setShift(d.shift); setShowShift(false);
+          staff={posStaff}
+          onOpen={async ({ member, name, role, pin, cash }) => {
+            const r = await fetch("/api/pos/shift", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "open",
+                branchId,
+                staffId: member?.id,
+                pin: pin || undefined,
+                staffName: member?.name ?? name,
+                role: member?.role ?? role,
+                openingCash: cash,
+              }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) return d.error ?? "تعذر فتح الوردية";
+            setShift(d.shift);
+            setShowShift(false);
+            await loadShift(branchId);
+            return null;
           }}
           onClose={async (closingCash) => {
             if (!shift) return;
@@ -820,23 +839,99 @@ function PaymentForm({ remaining, total, onAdd }: { remaining: number; total: nu
 }
 
 /* ─────── shift form ─────── */
-function ShiftForm({ shift, onOpen, onClose }: { shift: ShiftDTO | null; onOpen: (staff: string, role: string, cash: number) => void; onClose: (cash: number) => void }) {
-  const [staff, setStaff] = useState("");
+
+type ShiftMember = { id: number; name: string; role: string };
+type ShiftOpenInput = {
+  member: ShiftMember | null;
+  name: string;
+  role: string;
+  pin: string;
+  cash: number;
+};
+
+function ShiftForm({ shift, staff, onOpen, onClose }: {
+  shift: ShiftDTO | null;
+  staff: ShiftMember[];
+  onOpen: (input: ShiftOpenInput) => Promise<string | null>;
+  onClose: (cash: number) => void;
+}) {
+  const [name, setName] = useState("");
   const [role, setRole] = useState("cashier");
+  const [memberId, setMemberId] = useState<number | "">(staff[0]?.id ?? "");
+  const [pin, setPin] = useState("");
   const [cash, setCash] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const hasAccounts = staff.length > 0;
+  const member = hasAccounts ? (staff.find((s) => s.id === Number(memberId)) ?? staff[0]) : null;
+  const effectiveRole = member?.role ?? role;
+
   if (!shift) {
     return (
       <div>
         <h3 className="flex items-center gap-2 text-base font-black"><LogIn className="text-minty-500" /> فتح وردية جديدة</h3>
-        <input value={staff} onChange={(e) => setStaff(e.target.value)} placeholder="اسم الموظف" className="field mt-3" />
-        <div className="mt-2.5 grid grid-cols-3 gap-1.5">
-          {ROLES.map((r) => (
-            <button key={r.key} onClick={() => setRole(r.key)} className={`rounded-2xl py-2.5 text-xs font-black ${role === r.key ? "bg-ink text-white" : "bg-paper ring-1 ring-ink/10"}`}>{r.label}</button>
-          ))}
-        </div>
-        <p className="mt-3 flex items-center gap-1 text-[10px] font-bold text-ink-faint"><Lock size={11} /> {role === "cashier" ? "بيع وطباعة فقط" : role === "supervisor" ? "بيع + مرتجعات + خصم يدوي" : "كل الصلاحيات + إغلاق الصندوق"}</p>
+        {hasAccounts ? (
+          <>
+            <label className="mt-3 block text-[11px] font-black text-ink-soft">اختَر حسابك</label>
+            <select
+              value={memberId}
+              onChange={(e) => { setMemberId(Number(e.target.value)); setErr(""); }}
+              className="field mt-1.5 cursor-pointer text-sm font-black"
+            >
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>{s.name} — {ROLES.find((r) => r.key === s.role)?.label ?? s.role}</option>
+              ))}
+            </select>
+            <input
+              value={pin}
+              onChange={(e) => { setPin(e.target.value.replace(/[^\d]/g, "")); setErr(""); }}
+              placeholder="رمز الموظف (4–8 أرقام)"
+              type="password"
+              inputMode="numeric"
+              maxLength={8}
+              dir="ltr"
+              className="field mt-2.5 text-center font-black tracking-[0.3em]"
+            />
+          </>
+        ) : (
+          <>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="اسم الموظف" className="field mt-3" />
+            <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+              {ROLES.map((r) => (
+                <button key={r.key} onClick={() => setRole(r.key)} className={`rounded-2xl py-2.5 text-xs font-black ${role === r.key ? "bg-ink text-white" : "bg-paper ring-1 ring-ink/10"}`}>{r.label}</button>
+              ))}
+            </div>
+          </>
+        )}
+        <p className="mt-3 flex items-center gap-1 text-[10px] font-bold text-ink-faint">
+          <Lock size={11} /> {effectiveRole === "cashier" ? "بيع وطباعة فقط" : effectiveRole === "supervisor" ? "بيع + مرتجعات + خصم يدوي" : "كل الصلاحيات + إغلاق الصندوق"}
+        </p>
         <input value={cash} onChange={(e) => setCash(e.target.value.replace(/[^\d]/g, ""))} placeholder="النقد الافتتاحي بالدرج (د.ع)" inputMode="numeric" className="field mt-3 text-center font-black" dir="ltr" />
-        <button onClick={() => staff.trim() && onOpen(staff.trim(), role, Number(cash) || 0)} className="mt-4 w-full rounded-2xl bg-gradient-to-l from-minty-400 to-aqua-500 py-3.5 text-sm font-black text-white">فتح الوردية</button>
+        {err && <p className="mt-2 text-center text-[11px] font-black text-blush-600">{err}</p>}
+        <button
+          disabled={busy}
+          onClick={async () => {
+            if (hasAccounts && !member) return setErr("اختَر حسابك");
+            if (hasAccounts && pin.length < 4) return setErr("أدخل رمز الموظف");
+            if (!hasAccounts && !name.trim()) return setErr("اكتب اسم الموظف");
+            setBusy(true);
+            setErr("");
+            const error = await onOpen({
+              member,
+              name: name.trim(),
+              role,
+              pin,
+              cash: Number(cash) || 0,
+            });
+            setBusy(false);
+            if (error) { setErr(error); setPin(""); }
+          }}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-l from-minty-400 to-aqua-500 py-3.5 text-sm font-black text-white disabled:opacity-60"
+        >
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
+          فتح الوردية
+        </button>
       </div>
     );
   }

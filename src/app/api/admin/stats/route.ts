@@ -5,6 +5,7 @@ import { baghdadDayKey, baghdadTodayKey } from "@/lib/format";
 import { gatewayById } from "@/lib/payments";
 import { toProductDTO } from "@/lib/dto";
 import { adminUnauthorized, isAdminAuthed } from "@/lib/admin-auth";
+import { adminActor, logAudit } from "@/lib/audit";
 import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -136,5 +137,9 @@ export async function PATCH(req: NextRequest) {
     .set({ stock: sql`${products.stock} + ${Math.round(Number(body.add) || 0)}` })
     .where(eq(products.id, body.productId))
     .returning();
+  await logAudit(adminActor(req), "stock.restock", `product:${body.productId}`, {
+    add: Math.round(Number(body.add) || 0),
+    stock: row?.stock ?? null,
+  });
   return Response.json({ product: row });
 }

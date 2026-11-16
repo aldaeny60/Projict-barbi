@@ -12,6 +12,8 @@ import {
   customers,
 } from "@/db/schema";
 import { sql } from "drizzle-orm";
+import type { NextRequest } from "next/server";
+import { ipOf, logAudit } from "@/lib/audit";
 import {
   SEED_CATEGORIES,
   SEED_PRODUCTS,
@@ -49,7 +51,14 @@ const GOVS_WEIGHTED = [
   "الأنبار", "كركوك", "صلاح الدين", "واسط", "ميسان", "المثنى", "القادسية", "دهوك", "السليمانية", "ذي قار",
 ];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // البذر ليس عاماً: في الإنتاج يتطلب جلسة إدارة، وفي التطوير يُسمح به لتهيئة أولى فقط
+  if (process.env.NODE_ENV === "production") {
+    const { isAdminAuthed } = await import("@/lib/admin-auth");
+    if (!isAdminAuthed(req)) {
+      return Response.json({ seeded: false, error: "البذر مخصص للإدارة فقط" }, { status: 401 });
+    }
+  }
   try {
     const existing = await db.select({ n: sql<number>`count(*)` }).from(products);
     const count = Number(existing[0]?.n ?? 0);
@@ -225,6 +234,11 @@ export async function GET() {
       await db.insert(orderItems).values(items.map((it) => ({ ...it, orderId: ord.id })));
     }
 
+    await logAudit({ actor: "seed", role: "system", ip: ipOf(req) }, "seed.run", null, {
+      products: insertedProducts.length,
+      orders: 46,
+    });
+
     return Response.json({ seeded: true, products: insertedProducts.length, orders: 46 });
   } catch (err) {
     console.error("seed error", err);
@@ -233,3 +247,4 @@ export async function GET() {
 }
 
 export const POST = GET;
+

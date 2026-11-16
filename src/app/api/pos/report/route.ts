@@ -1,16 +1,26 @@
 import { db } from "@/db";
 import { branches, orderItems, orders } from "@/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { baghdadDayKey, baghdadDayRange, baghdadTodayKey } from "@/lib/format";
+import { isAdminAuthed } from "@/lib/admin-auth";
+import { staffAtLeast, staffFromRequest } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
-/** GET ?date=YYYY-MM-DD&branchId= → تقرير الصندوق اليومي */
+/** GET ?date=YYYY-MM-DD&branchId= → تقرير الصندوق اليومي (مشرف/مدير، ومقيّد بفرع الجلسة) */
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const date = sp.get("date") || baghdadTodayKey();
-  const branchId = Number(sp.get("branchId")) || 0;
+  const requested = Number(sp.get("branchId")) || 0;
+
+  const admin = isAdminAuthed(req);
+  const staff = staffFromRequest(req);
+  if (!admin && !staffAtLeast(req, "supervisor")) {
+    return Response.json({ error: "تقرير الصندوق يتطلب صلاحية مشرف أو مدير" }, { status: 403 });
+  }
+  // الموظف يرى فرعه فقط، والإدارة ترى أي فرع
+  const branchId = admin ? requested : staff!.branchId;
   const { start, end } = baghdadDayRange(date);
 
   const all = await db.select().from(orders);

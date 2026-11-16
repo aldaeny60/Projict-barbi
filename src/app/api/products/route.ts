@@ -4,6 +4,7 @@ import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "
 import type { NextRequest } from "next/server";
 import { toProductDTO } from "@/lib/dto";
 import { adminUnauthorized, isAdminAuthed } from "@/lib/admin-auth";
+import { adminActor, logAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,11 @@ export async function POST(req: NextRequest) {
         isNew: Boolean(body.isNew),
       })
       .returning();
+    await logAudit(adminActor(req), "product.create", `product:${row.id}`, {
+      name: row.name,
+      price: row.price,
+      stock: row.stock,
+    });
     return Response.json({ product: row });
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 500 });

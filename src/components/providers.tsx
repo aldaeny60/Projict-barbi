@@ -11,7 +11,7 @@ import React, {
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
-import type { CartLine } from "@/lib/types";
+import type { CartLine, ProductDTO } from "@/lib/types";
 
 export type Customer = { id: number; name: string; phone: string };
 
@@ -75,6 +75,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastId = useRef(0);
   const hydrated = useRef(false);
+  const customerRef = useRef<Customer | null>(null);
+  const favoritesRef = useRef<CartLine[]>([]);
+  const syncedFor = useRef<string | null>(null);
+  customerRef.current = customer;
+  favoritesRef.current = favorites;
 
   /* hydrate from localStorage */
   useEffect(() => {
@@ -88,6 +93,64 @@ export function Providers({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
     hydrated.current = true;
   }, []);
+
+  /* جلسة الزبون الحقيقية من الخادم (كوكي OTP موقّعة) — لا نثق بـ localStorage وحده */
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/customer/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { customer: Customer | null } | null) => {
+        if (!alive || !d) return; // فشل الشبكة: نُبقي النسخة المحلية للعمل بلا اتصال
+        setCustomer(d.customer);
+        try {
+          if (d.customer) localStorage.setItem(CUSTOMER_KEY, JSON.stringify(d.customer));
+          else localStorage.removeItem(CUSTOMER_KEY);
+        } catch { /* ignore */ }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  /* دمج المفضلة المحلية مع الخادم مرة واحدة بعد الدخول، ثم جلب مفضلة الحساب */
+  useEffect(() => {
+    if (!customer) return;
+    if (syncedFor.current === customer.phone) return;
+    syncedFor.current = customer.phone;
+    const local = favorites;
+    (async () => {
+      for (const f of local) {
+        await fetch("/api/customer/favorites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId: f.productId }),
+        }).catch(() => {});
+      }
+      const r = await fetch("/api/customer/favorites").catch(() => null);
+      if (!r?.ok) return;
+      const d = (await r.json().catch(() => null)) as { favorites?: ProductDTO[] } | null;
+      const server = d?.favorites ?? [];
+      if (!server.length) return;
+      setFavorites((prev) => {
+        const byId = new Map(prev.map((l) => [l.productId, l] as const));
+        for (const p of server) {
+          if (byId.has(p.id)) continue;
+          byId.set(p.id, {
+            productId: p.id,
+            slug: p.slug,
+            name: p.name,
+            price: p.price,
+            compareAtPrice: p.compareAtPrice,
+            image: p.images[0] ?? "",
+            size: p.sizes[0] ?? "",
+            color: p.colors[0]?.name ?? "",
+            qty: 1,
+            stock: p.stock,
+          });
+        }
+        return [...byId.values()];
+      });
+    })();
+  }, [customer, favorites]);
 
   useEffect(() => {
     if (hydrated.current) localStorage.setItem(CART_KEY, JSON.stringify(lines));
@@ -143,8 +206,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   const toggleFav = useCallback<FavCtx["toggleFav"]>((line) => {
+    const exists = favoritesRef.current.some((f) => f.productId === line.productId);
+    // المفضلة تُحفظ على الخادم أيضاً حتى تبقى بين الأجهزة (تتجاهل بهدوء بلا اتصال)
+    if (customerRef.current) {
+      fetch("/api/customer/favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: line.productId, action: exists ? "remove" : "add" }),
+      }).catch(() => {});
+    }
     setFavorites((prev) =>
-      prev.some((f) => f.productId === line.productId)
+      exists
         ? prev.filter((f) => f.productId !== line.productId)
         : [
             ...prev,
@@ -178,7 +250,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       },
       logout: () => {
         setCustomer(null);
+        syncedFor.current = null;
         localStorage.removeItem(CUSTOMER_KEY);
+        // إنهاء جلسة الخادم الموقّعة أيضاً (كوكي الزبون)
+        fetch("/api/customer/me", { method: "DELETE" }).catch(() => {});
       },
     }),
     [customer]

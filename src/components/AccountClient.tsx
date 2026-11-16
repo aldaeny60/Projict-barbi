@@ -36,16 +36,16 @@ export function AccountClient() {
   const [coupons, setCoupons] = useState<CouponDTO[]>([]);
   const [favProducts, setFavProducts] = useState<Map<number, ProductDTO>>(new Map());
 
-  const loadOrders = useCallback((ph: string) => {
+  const loadOrders = useCallback(() => {
     setOrders(null);
-    fetch(`/api/orders?phone=${encodeURIComponent(ph)}`)
+    fetch("/api/orders")
       .then((r) => r.json())
       .then((d) => setOrders(d.orders ?? []))
       .catch(() => setOrders([]));
   }, []);
 
   useEffect(() => {
-    if (customer) loadOrders(customer.phone);
+    if (customer) loadOrders();
     fetch("/api/coupons").then((r) => r.json()).then((d) => setCoupons((d.coupons ?? []).filter((c: CouponDTO) => c.active))).catch(() => {});
   }, [customer, loadOrders]);
 
@@ -77,7 +77,8 @@ export function AccountClient() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
       setStep("code");
-      toast(`رمزك التجريبي: ${d.devCode} (وصلك SMS)`, "info");
+      if (d.devCode) toast(`رمز التحقق (وضع التطوير): ${d.devCode}`, "info");
+      else toast("أرسلنا رمز التحقق برسالة SMS", "info");
     } catch (e) {
       toast(e instanceof Error ? e.message : "تعذر الإرسال", "err");
     } finally {
@@ -210,7 +211,7 @@ export function AccountClient() {
 
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-          {tab === "orders" && <OrdersTab orders={orders} reload={() => loadOrders(customer.phone)} />}
+          {tab === "orders" && <OrdersTab orders={orders} reload={loadOrders} />}
           {tab === "favorites" && <FavoritesTab favProducts={favProducts} />}
           {tab === "coupons" && <CouponsTab coupons={coupons} />}
           {tab === "addresses" && <AddressesTab />}
@@ -226,6 +227,21 @@ export function AccountClient() {
 function OrdersTab({ orders, reload }: { orders: OrderDTO[] | null; reload: () => void }) {
   const { toast } = useToast();
   const [cancelId, setCancelId] = useState<number | null>(null);
+
+  const requestReturn = async (id: number) => {
+    const r = await fetch(`/api/orders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "return_requested" }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      toast("سجّلنا طلب الإرجاع — فريق باربي يتواصل معك");
+      reload();
+    } else {
+      toast(d.error ?? "تعذر طلب الإرجاع", "err");
+    }
+  };
 
   const cancel = async (id: number) => {
     const r = await fetch(`/api/orders/${id}`, {
@@ -302,6 +318,11 @@ function OrdersTab({ orders, reload }: { orders: OrderDTO[] | null; reload: () =
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-black text-blush-600">{formatIQD(o.total)}</span>
+                {o.status === "delivered" && (
+                  <button onClick={() => requestReturn(o.id)} className="rounded-full bg-butter-100 px-3 py-1.5 text-[11px] font-black text-butter-700 hover:bg-butter-200">
+                    طلب إرجاع
+                  </button>
+                )}
                 {o.status === "pending" && (
                   cancelId === o.id ? (
                     <span className="flex items-center gap-1.5">
@@ -378,39 +399,75 @@ function CouponsTab({ coupons }: { coupons: CouponDTO[] }) {
   );
 }
 
-type Address = { gov: string; detail: string };
+type Address = {
+  id: number;
+  governorate: string;
+  district: string | null;
+  detail: string;
+  createdAt: string;
+};
+
 function AddressesTab() {
   const { toast } = useToast();
-  const [list, setList] = useState<Address[]>([]);
+  const [list, setList] = useState<Address[] | null>(null);
   const [gov, setGov] = useState("بغداد");
   const [detail, setDetail] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    try {
-      setList(JSON.parse(localStorage.getItem("sighar_addr_v1") ?? "[]"));
-    } catch { /* ignore */ }
+  const load = useCallback(() => {
+    fetch("/api/customer/addresses")
+      .then((r) => r.json())
+      .then((d) => setList(d.addresses ?? []))
+      .catch(() => setList([]));
   }, []);
-  const save = (next: Address[]) => {
-    setList(next);
-    localStorage.setItem("sighar_addr_v1", JSON.stringify(next));
+  useEffect(() => { load(); }, [load]);
+
+  const add = async () => {
+    if (detail.trim().length < 5) return toast("اكتبي العنوان التفصيلي (5 أحرف على الأقل)", "err");
+    setBusy(true);
+    try {
+      const r = await fetch("/api/customer/addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ governorate: gov, detail: detail.trim() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? "تعذر حفظ العنوان");
+      setDetail("");
+      toast("انحفظ العنوان على حسابك");
+      load();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "تعذر حفظ العنوان", "err");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: number) => {
+    const r = await fetch(`/api/customer/addresses?id=${id}`, { method: "DELETE" });
+    if (r.ok) {
+      toast("انحذف العنوان");
+      load();
+    } else toast("تعذر حذف العنوان", "err");
   };
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <div className="space-y-3">
-        {list.length === 0 && (
+        {list === null && <div className="shimmer h-24 rounded-3xl" />}
+        {list?.length === 0 && (
           <div className="card-bubble p-8 text-center text-sm font-bold text-ink-soft">ما عندج عناوين محفوظة — ضيفي عنوان البيت أو الشغل</div>
         )}
-        {list.map((a, i) => (
-          <div key={i} className="card-bubble flex items-center justify-between gap-3 p-4">
+        {list?.map((a) => (
+          <div key={a.id} className="card-bubble flex items-center justify-between gap-3 p-4">
             <div className="flex items-center gap-3">
               <span className="grid size-11 place-items-center rounded-2xl bg-aqua-100 text-aqua-600"><MapPin size={18} /></span>
               <div>
-                <p className="text-sm font-black">{a.gov}</p>
+                <p className="text-sm font-black">{a.governorate}{a.district ? ` — ${a.district}` : ""}</p>
                 <p className="text-xs font-semibold text-ink-soft">{a.detail}</p>
               </div>
             </div>
-            <button onClick={() => save(list.filter((_, x) => x !== i))} className="text-xs font-black text-blush-600 hover:underline">حذف</button>
+            <button onClick={() => remove(a.id)} className="text-xs font-black text-blush-600 hover:underline">حذف</button>
           </div>
         ))}
       </div>
@@ -421,16 +478,14 @@ function AddressesTab() {
         </select>
         <textarea value={detail} onChange={(e) => setDetail(e.target.value)} rows={2} placeholder="الحي / الزقاق / أقرب نقطة دالة" className="field mt-2.5 text-sm" />
         <button
-          onClick={() => {
-            if (detail.trim().length < 4) return toast("اكتبي العنوان التفصيلي", "err");
-            save([...list, { gov, detail: detail.trim() }]);
-            setDetail("");
-            toast("انحفظ العنوان");
-          }}
-          className="mt-3 w-full rounded-2xl bg-ink py-3 text-sm font-black text-white transition-transform hover:scale-[1.02]"
+          onClick={add}
+          disabled={busy}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-3 text-sm font-black text-white transition-transform hover:scale-[1.02] disabled:opacity-60"
         >
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <MapPin size={15} />}
           حفظ العنوان
         </button>
+        <p className="mt-2 text-[10px] font-bold text-ink-faint">العنوان يُحفظ على حسابك ويظهر بأي جهاز تدخلين منه برقمك</p>
       </div>
     </div>
   );

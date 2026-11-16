@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Package, ShoppingBag, TicketPercent, Truck, Boxes, Store,
   Lock, Loader2, Plus, Pencil, Trash2, X, Check, Search, AlertTriangle,
   TrendingUp, Banknote, ReceiptText, RefreshCcw, ChevronLeft, Star, Globe,
+  Users, ScrollText, Upload,
 } from "lucide-react";
 import { MarketSearchTab } from "@/components/AdminMarketSearch";
 import type { CategoryDTO, CouponDTO, DeliveryFeeDTO, OrderDTO, ProductDTO } from "@/lib/types";
@@ -33,7 +34,7 @@ type Stats = {
   recentOrders: { id: number; code: string; source: string; customerName: string; governorate: string | null; total: number; status: string; paymentMethod: string; createdAt: string }[];
 };
 
-type Tab = "overview" | "products" | "orders" | "coupons" | "delivery" | "inventory" | "branches" | "market";
+type Tab = "overview" | "products" | "orders" | "coupons" | "delivery" | "inventory" | "branches" | "team" | "audit" | "market";
 
 const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "overview", label: "نظرة عامة", icon: LayoutDashboard },
@@ -43,6 +44,8 @@ const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "delivery", label: "التوصيل", icon: Truck },
   { key: "inventory", label: "المخزون", icon: Boxes },
   { key: "branches", label: "الفروع", icon: Store },
+  { key: "team", label: "الفريق والصلاحيات", icon: Users },
+  { key: "audit", label: "سجل التدقيق", icon: ScrollText },
   { key: "market", label: "رصد السوق", icon: Globe },
 ];
 
@@ -53,6 +56,7 @@ const STATUS_TONE: Record<string, string> = {
   out_for_delivery: "bg-lilac-200 text-lilac-700",
   delivered: "bg-minty-100 text-minty-700",
   cancelled: "bg-gray-100 text-gray-500",
+  return_requested: "bg-butter-200 text-butter-700",
   returned: "bg-blush-100 text-blush-700",
 };
 
@@ -192,6 +196,8 @@ export default function AdminPage() {
                 {tab === "delivery" && <DeliveryTab />}
                 {tab === "inventory" && <InventoryTab stats={stats} onRefresh={() => fetch("/api/admin/stats").then((r) => r.json()).then(setStats)} />}
                 {tab === "branches" && <BranchesTab />}
+                {tab === "team" && <TeamTab />}
+                {tab === "audit" && <AuditTab />}
                 {tab === "market" && <MarketSearchTab />}
               </motion.div>
             </AnimatePresence>
@@ -308,6 +314,7 @@ function ProductsTab() {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<ProductForm | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(() => {
     fetch("/api/products?limit=100").then((r) => r.json()).then((d) => setItems(d.products ?? [])).catch(() => setItems([]));
@@ -328,6 +335,27 @@ function ProductsTab() {
     compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "", stock: String(p.stock),
     categoryId: p.categoryId, images: p.images.join("\n"), sizes: p.sizes, colors: p.colors, isNew: p.isNew,
   });
+
+  /** رفع صور حقيقية من الجهاز إلى الخادم وإضافتها لقائمة روابط المنتج */
+  const uploadImages = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploading(true);
+    const urls: string[] = [];
+    for (const file of Array.from(files).slice(0, 6)) {
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const r = await fetch("/api/uploads", { method: "POST", body: fd });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok && d.url) urls.push(String(d.url));
+      } catch { /* تجاهل الملف الفاشل وانتقل للتالي */ }
+    }
+    setUploading(false);
+    if (!urls.length) return;
+    setEditing((prev) =>
+      prev ? { ...prev, images: [prev.images, ...urls].filter(Boolean).join("\n") } : prev
+    );
+  };
 
   const save = async () => {
     if (!editing) return;
@@ -426,6 +454,29 @@ function ProductsTab() {
                   {cats.map((c) => <option key={c.id} value={c.id}>{c.nameAr} — {c.section}</option>)}
                 </select>
                 <textarea value={editing.images} onChange={(e) => setEditing({ ...editing, images: e.target.value })} placeholder={"روابط الصور — رابط في كل سطر (4 صور على الأقل)"} rows={3} className="field text-xs" dir="ltr" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-lilac-100 px-3 py-2 text-[11px] font-black text-lilac-700 transition-transform hover:scale-105">
+                    {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                    {uploading ? "جاري الرفع..." : "رفع صور من الجهاز"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+                      multiple
+                      className="hidden"
+                      disabled={uploading}
+                      onChange={(e) => { uploadImages(e.target.files); e.currentTarget.value = ""; }}
+                    />
+                  </label>
+                  <span className="text-[10px] font-bold text-ink-faint">JPG/PNG/WebP حتى 6 ميغا — تُخزَّن على الخادم</span>
+                </div>
+                {editing.images.trim() && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {editing.images.split(/\n+/).map((s) => s.trim()).filter(Boolean).slice(0, 8).map((src) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={src} src={src} alt="" className="size-14 rounded-xl object-cover ring-2 ring-paper" />
+                    ))}
+                  </div>
+                )}
                 <div>
                   <p className="mb-1.5 text-xs font-black text-ink-soft">المقاسات المتوفرة</p>
                   <div className="flex flex-wrap gap-1.5">
@@ -549,7 +600,7 @@ function OrdersTab() {
 /* ═══ coupons ═══ */
 function CouponsTab() {
   const [coupons, setCoupons] = useState<CouponDTO[] | null>(null);
-  const [form, setForm] = useState({ code: "", type: "percent", value: "", minSubtotal: "", description: "" });
+  const [form, setForm] = useState({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "" });
   const load = useCallback(() => fetch("/api/coupons").then((r) => r.json()).then((d) => setCoupons(d.coupons ?? [])).catch(() => setCoupons([])), []);
   useEffect(() => { load(); }, [load]);
 
@@ -565,9 +616,31 @@ function CouponsTab() {
                 <p className="text-[11px] font-bold text-ink-soft">
                   {c.type === "percent" ? `${c.value}%` : formatIQD(c.value)} — حد أدنى {formatIQD(c.minSubtotal)}
                 </p>
+                <p className="text-[10px] font-bold text-ink-faint">
+                  الاستخدام: {formatNum(c.usedCount ?? 0)} / {c.maxUses ?? "∞"}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                defaultValue={c.maxUses ?? ""}
+                id={`max-${c.id}`}
+                placeholder="حد"
+                dir="ltr"
+                inputMode="numeric"
+                className="field w-16 py-1.5 text-center text-[11px] font-black"
+                title="حد الاستخدام — فارغ = بلا حد"
+              />
+              <button onClick={async () => {
+                const el = document.getElementById(`max-${c.id}`) as HTMLInputElement | null;
+                const raw = (el?.value ?? "").replace(/[^\d]/g, "");
+                await fetch("/api/coupons", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id: c.id, maxUses: raw ? Number(raw) : null }),
+                });
+                load();
+              }} className="rounded-full bg-ink/5 px-3 py-1.5 text-[10px] font-black text-ink">حفظ الحد</button>
               <button onClick={async () => { await fetch("/api/coupons", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: c.id, active: !c.active }) }); load(); }}
                 className={`rounded-full px-3.5 py-1.5 text-[11px] font-black ${c.active ? "bg-minty-100 text-minty-700" : "bg-ink/5 text-ink-faint"}`}>
                 {c.active ? "مفعّل" : "موقوف"}
@@ -590,10 +663,11 @@ function CouponsTab() {
           </div>
           <input value={form.minSubtotal} onChange={(e) => setForm({ ...form, minSubtotal: e.target.value.replace(/[^\d]/g, "") })} placeholder="الحد الأدنى للطلب (د.ع)" className="field text-sm" dir="ltr" inputMode="numeric" />
           <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="وصف قصير" className="field text-sm" />
+          <input value={form.maxUses} onChange={(e) => setForm({ ...form, maxUses: e.target.value.replace(/[^\d]/g, "") })} placeholder="حد الاستخدام — فارغ = بلا حد" className="field text-sm" dir="ltr" inputMode="numeric" />
           <button onClick={async () => {
             if (!form.code || !form.value) return;
             await fetch("/api/coupons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, value: Number(form.value), minSubtotal: Number(form.minSubtotal) || 0 }) });
-            setForm({ code: "", type: "percent", value: "", minSubtotal: "", description: "" });
+            setForm({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "" });
             load();
           }} className="w-full rounded-2xl bg-ink py-3 text-sm font-black text-white transition-transform hover:scale-[1.02]">إنشاء</button>
         </div>
@@ -703,6 +777,308 @@ function BranchesTab() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/* ═══ الفريق والصلاحيات (RBAC) ═══ */
+
+type StaffRow = {
+  id: number;
+  name: string;
+  role: string;
+  branchId: number | null;
+  branchName: string | null;
+  active: boolean;
+  createdAt: string;
+};
+
+type BranchRow = { id: number; name: string; city: string; phone: string | null; address: string | null };
+
+const STAFF_ROLE_LABELS: Record<string, string> = {
+  cashier: "كاشير",
+  supervisor: "مشرف",
+  manager: "مدير فرع",
+};
+
+function TeamTab() {
+  const [list, setList] = useState<StaffRow[] | null>(null);
+  const [branches, setBranches] = useState<BranchRow[]>([]);
+  const [form, setForm] = useState({ name: "", role: "cashier", branchId: "1", pin: "" });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [pinFor, setPinFor] = useState<{ id: number; value: string } | null>(null);
+
+  const load = useCallback(() => {
+    fetch("/api/admin/staff")
+      .then((r) => r.json())
+      .then((d) => setList(d.staff ?? []))
+      .catch(() => setList([]));
+  }, []);
+
+  useEffect(() => {
+    load();
+    fetch("/api/pos/shift?branchId=1")
+      .then((r) => r.json())
+      .then((d) => setBranches(d.branches ?? []))
+      .catch(() => {});
+  }, [load]);
+
+  const create = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          role: form.role,
+          branchId: Number(form.branchId) || null,
+          pin: form.pin,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? "تعذر إنشاء الحساب");
+      setForm({ name: "", role: "cashier", branchId: form.branchId, pin: "" });
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر إنشاء الحساب");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const patch = async (id: number, body: Record<string, unknown>) => {
+    setError("");
+    const r = await fetch("/api/admin/staff", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...body }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      setError(d.error ?? "تعذر التحديث");
+    }
+    load();
+  };
+
+  const remove = async (id: number) => {
+    await fetch(`/api/admin/staff?id=${id}`, { method: "DELETE" });
+    load();
+  };
+
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-[1fr_340px]">
+      <div className="space-y-2.5">
+        {list === null && <div className="shimmer h-40 rounded-3xl" />}
+        {list?.length === 0 && (
+          <div className="card-bubble p-8 text-center text-sm font-bold text-ink-soft">
+            ما عندك حسابات موظفين بعد — أضف حساباً لكل كاشير حتى يُنسب كل بيع ومرتجع لشخصه
+          </div>
+        )}
+        {list?.map((s) => (
+          <div key={s.id} className="card-bubble p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className={`grid size-10 place-items-center rounded-2xl ${s.active ? "bg-aqua-100 text-aqua-700" : "bg-ink/5 text-ink-faint"}`}>
+                  <Users size={17} />
+                </span>
+                <div>
+                  <p className="text-sm font-black">{s.name}</p>
+                  <p className="text-[11px] font-bold text-ink-soft">
+                    {STAFF_ROLE_LABELS[s.role] ?? s.role} • {s.branchName ?? "كل الفروع"} • {s.active ? "مفعّل" : "موقوف"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={s.role}
+                  onChange={(e) => patch(s.id, { role: e.target.value })}
+                  className="field w-auto cursor-pointer py-1.5 text-[11px] font-black"
+                >
+                  {Object.entries(STAFF_ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+                <button
+                  onClick={() => setPinFor(pinFor?.id === s.id ? null : { id: s.id, value: "" })}
+                  className="rounded-full bg-ink/5 px-3 py-1.5 text-[10px] font-black text-ink"
+                >
+                  رمز جديد
+                </button>
+                <button
+                  onClick={() => patch(s.id, { active: !s.active })}
+                  className={`rounded-full px-3.5 py-1.5 text-[11px] font-black ${s.active ? "bg-minty-100 text-minty-700" : "bg-ink/5 text-ink-faint"}`}
+                >
+                  {s.active ? "مفعّل" : "موقوف"}
+                </button>
+                <button onClick={() => remove(s.id)} className="grid size-9 place-items-center rounded-xl bg-blush-100 text-blush-600 transition-transform hover:scale-110">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+            {pinFor?.id === s.id && (
+              <div className="mt-3 flex items-center gap-2 border-t border-dashed border-ink/10 pt-3">
+                <input
+                  value={pinFor.value}
+                  onChange={(e) => setPinFor({ id: s.id, value: e.target.value.replace(/[^\d]/g, "") })}
+                  placeholder="رمز من 4 إلى 8 أرقام"
+                  dir="ltr"
+                  inputMode="numeric"
+                  maxLength={8}
+                  className="field w-44 py-2 text-center text-sm font-black"
+                />
+                <button
+                  onClick={async () => { await patch(s.id, { pin: pinFor.value }); setPinFor(null); }}
+                  disabled={pinFor.value.length < 4}
+                  className="rounded-xl bg-ink px-4 py-2.5 text-[11px] font-black text-white disabled:opacity-40"
+                >
+                  حفظ الرمز
+                </button>
+                <button onClick={() => setPinFor(null)} className="text-[11px] font-black text-ink-soft">إلغاء</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="card-bubble h-fit p-5">
+        <h3 className="mb-3 text-sm font-black">حساب موظف جديد</h3>
+        <div className="space-y-2.5">
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="اسم الموظف" className="field text-sm" />
+          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="field cursor-pointer text-sm">
+            {Object.entries(STAFF_ROLE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })} className="field cursor-pointer text-sm">
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name} — {b.city}</option>)}
+          </select>
+          <input
+            value={form.pin}
+            onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/[^\d]/g, "") })}
+            placeholder="رمز الدخول (4–8 أرقام)"
+            dir="ltr"
+            inputMode="numeric"
+            maxLength={8}
+            className="field text-center text-sm font-black"
+          />
+          {error && <p className="text-[11px] font-black text-blush-600">{error}</p>}
+          <button
+            onClick={create}
+            disabled={busy || form.name.trim().length < 2 || form.pin.length < 4}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-3 text-sm font-black text-white transition-transform hover:scale-[1.02] disabled:opacity-50"
+          >
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} إنشاء الحساب
+          </button>
+          <p className="text-[10px] font-bold leading-5 text-ink-faint">
+            بعد إضافة أول حساب لفرع، لا يفتح الكاشير ورديةً إلا باختيار حسابه وإدخال رمزه. الرمز يُخزَّن مُجزّأً ولا يظهر لأحد.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ سجل التدقيق ═══ */
+
+type AuditEntry = {
+  id: number;
+  actor: string;
+  role: string;
+  action: string;
+  target: string | null;
+  meta: Record<string, unknown>;
+  ip: string | null;
+  createdAt: string;
+};
+
+const AUDIT_LABELS: Record<string, string> = {
+  "admin.login": "دخول إدارة",
+  "admin.logout": "خروج إدارة",
+  "admin.login.failed": "محاولة دخول فاشلة",
+  "admin.login.blocked": "محاولة محجوبة (حد المعدل)",
+  "order.status": "تغيير حالة طلب",
+  "product.create": "إضافة منتج",
+  "product.update": "تعديل منتج",
+  "product.delete": "حذف منتج",
+  "coupon.create": "إنشاء كوبون",
+  "coupon.update": "تعديل كوبون",
+  "coupon.delete": "حذف كوبون",
+  "upload.create": "رفع صورة",
+  "stock.restock": "إعادة تخزين",
+  "pos.sale": "بيع كاشير",
+  "pos.shift.open": "فتح وردية",
+  "pos.shift.close": "إغلاق وردية",
+  "pos.shift.denied": "رمز موظف خاطئ",
+  "staff.create": "إنشاء حساب موظف",
+  "staff.update": "تعديل حساب موظف",
+  "staff.delete": "حذف حساب موظف",
+  "seed.run": "بذر بيانات",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "إدارة",
+  cashier: "كاشير",
+  supervisor: "مشرف",
+  manager: "مدير",
+  customer: "زبون",
+  system: "نظام",
+};
+
+function AuditTab() {
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [q, setQ] = useState("");
+
+  const load = useCallback((query: string) => {
+    setEntries(null);
+    fetch(`/api/admin/audit?limit=150${query ? `&q=${encodeURIComponent(query)}` : ""}`)
+      .then((r) => r.json())
+      .then((d) => setEntries(d.entries ?? []))
+      .catch(() => setEntries([]));
+  }, []);
+
+  useEffect(() => { load(""); }, [load]);
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-52">
+          <Search size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث في السجل..." className="field pr-10 py-2.5 text-sm" />
+        </div>
+        <button onClick={() => load(q.trim())} className="rounded-2xl bg-ink px-4 py-2.5 text-xs font-black text-white transition-transform hover:scale-105">بحث</button>
+      </div>
+
+      <div className="card-bubble overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-right text-xs">
+            <thead>
+              <tr className="bg-paper text-[10px] font-black text-ink-soft">
+                <th className="p-3">الوقت</th><th className="p-3">الفاعل</th><th className="p-3">العملية</th>
+                <th className="p-3">الهدف</th><th className="p-3">التفاصيل</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries?.map((e) => (
+                <tr key={e.id} className="border-t border-black/5 font-bold hover:bg-blush-50/40">
+                  <td className="whitespace-nowrap p-3 text-[10px] text-ink-faint">{fmtDateTime(e.createdAt)}</td>
+                  <td className="p-3">
+                    <span className="block">{e.actor}</span>
+                    <span className="text-[10px] text-ink-faint">{ROLE_LABELS[e.role] ?? e.role}</span>
+                  </td>
+                  <td className="p-3">{AUDIT_LABELS[e.action] ?? e.action}</td>
+                  <td className="p-3 text-[10px] text-ink-soft" dir="ltr">{e.target ?? "—"}</td>
+                  <td className="p-3 text-[10px] text-ink-soft" dir="ltr">
+                    {Object.keys(e.meta ?? {}).length ? JSON.stringify(e.meta) : "—"}
+                  </td>
+                </tr>
+              ))}
+              {entries === null && <tr><td colSpan={5} className="p-8 text-center"><Loader2 className="mx-auto animate-spin text-lilac-400" /></td></tr>}
+              {entries?.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-sm font-bold text-ink-faint">لا توجد عمليات مطابقة</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p className="mt-3 text-[10px] font-bold text-ink-faint">السجل للقراءة فقط — يُكتب من الخادم ولا يمكن تعديله أو حذفه من الواجهة.</p>
     </div>
   );
 }

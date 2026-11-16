@@ -27,6 +27,15 @@ async function test(name, fn) {
 const j = (r) => r.json();
 const assert = (c, msg) => { if (!c) throw new Error(msg); };
 
+/* جلسات الاختبار: الزبون بعد توثيق OTP، والكاشير بعد فتح وردية، والإدارة بعد الدخول */
+let custCookie = "", staffCookie = "", orderCode = "";
+const jsonHeaders = { "Content-Type": "application/json" };
+async function loginCustomer(phone) {
+  const s = await fetch(`${BASE}/api/auth/otp`, { method: "POST", headers: jsonHeaders, body: JSON.stringify({ action: "send", phone }) }).then(j);
+  const res = await fetch(`${BASE}/api/auth/otp`, { method: "POST", headers: jsonHeaders, body: JSON.stringify({ action: "verify", phone, code: s.devCode, name: "عميل QA" }) });
+  return (res.headers.get("set-cookie") || "").split(";")[0];
+}
+
 async function run() {
   console.log(`🧪 BARBI QA — ${BASE}\n`);
 
@@ -115,6 +124,7 @@ async function run() {
     const expected = inv.subtotal - inv.discount + inv.deliveryFee;
     assert(Math.abs(expected - inv.total) <= 1, `totals mismatch ${expected} vs ${inv.total}`);
     orderId = r.order.id;
+    orderCode = r.order.code;
     return `${r.order.code} = ${inv.total.toLocaleString()} د.ع`;
   });
 
@@ -127,7 +137,8 @@ async function run() {
 
   // 11) تتبع الطلب برقم الهاتف
   await test("تتبع الطلب بالهاتف", async () => {
-    const r = await fetch(`${BASE}/api/orders?phone=${QA_PHONE}`).then(j);
+    custCookie = await loginCustomer(QA_PHONE);
+    const r = await fetch(`${BASE}/api/orders`, { headers: { cookie: custCookie } }).then(j);
     const mine = r.orders.find((o) => o.id === orderId);
     assert(mine && mine.status === "pending", "order not tracked");
     return `status: ${mine.status}`;
@@ -137,7 +148,7 @@ async function run() {
 
   // 13) إلغاء الطلب ⇒ استعادة المخزون
   await test("إلغاء طلب + استرداد المخزون", async () => {
-    const r = await fetch(`${BASE}/api/orders/${orderId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) }).then(j);
+    const r = await fetch(`${BASE}/api/orders/${orderId}`, { method: "PATCH", headers: { "Content-Type": "application/json", cookie: custCookie }, body: JSON.stringify({ status: "cancelled" }) }).then(j);
     assert(r.ok, JSON.stringify(r));
     const det = await fetch(`${BASE}/api/products/${product.id}`).then(j);
     assert(det.product.stock === stockBefore, "stock not restored");
@@ -186,6 +197,23 @@ async function run() {
     return `409 — «${victim.name}» بمخزون 2`;
   });
 
+  // 16ج) فتح وردية كاشير: البيع يتطلب جلسة موظف موقّعة
+  await test("فتح وردية كاشير بجلسة موقّعة", async () => {
+    const r = await fetch(`${BASE}/api/pos/shift`, { method: "POST", headers: jsonHeaders, body: JSON.stringify({ action: "open", branchId: 1, staffName: "QA-BOT", role: "cashier", openingCash: 0 }) });
+    const d = await r.json();
+    assert(r.ok && d.shift?.id, JSON.stringify(d));
+    staffCookie = (r.headers.get("set-cookie") || "").split(";")[0];
+    assert(staffCookie.startsWith("barbi_staff="), "no staff cookie");
+    return `وردية #${d.shift.id}`;
+  });
+
+  // 16د) البيع بلا وردية مرفوض
+  await test("بيع POS بلا وردية مرفوض (401)", async () => {
+    const r = await fetch(`${BASE}/api/pos/sale`, { method: "POST", headers: jsonHeaders, body: JSON.stringify({ items: [{ productId: 1, qty: 1 }], payments: [] }) });
+    assert(r.status === 401, `got ${r.status}`);
+    return "401 ✓";
+  });
+
   let posOrderId, posStockBefore;
   // 17) بيع كاشير بدفعة مقسّمة
   await test("بيع POS بدفع مقسّم", async () => {
@@ -194,7 +222,7 @@ async function run() {
     const qty = 1;
     const total = product.price * qty;
     const half = Math.ceil(total / 2);
-    const r = await fetch(`${BASE}/api/pos/sale`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+    const r = await fetch(`${BASE}/api/pos/sale`, { method: "POST", headers: { "Content-Type": "application/json", cookie: staffCookie }, body: JSON.stringify({
       branchId: 1, staffName: "QA-BOT",
       items: [{ productId: product.id, qty, size: product.sizes[0], color: product.colors[0].name }],
       payments: [{ method: "cash", amount: half }, { method: "zaincash", amount: total - half }],
@@ -206,10 +234,10 @@ async function run() {
 
   // 18) مرتجع POS ⇒ مخزون + حالة
   await test("مرتجع POS + استرداد", async () => {
-    const list = await fetch(`${BASE}/api/pos/sale?branchId=1&take=20`).then(j);
+    const list = await fetch(`${BASE}/api/pos/sale?branchId=1&take=20`, { headers: { cookie: staffCookie } }).then(j);
     const sale = list.sales.find((s) => s.code === posOrderId);
     assert(sale, "sale not found");
-    const r = await fetch(`${BASE}/api/orders/${sale.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "returned" }) }).then(j);
+    const r = await fetch(`${BASE}/api/orders/${sale.id}`, { method: "PATCH", headers: { "Content-Type": "application/json", cookie: staffCookie }, body: JSON.stringify({ status: "returned" }) }).then(j);
     assert(r.ok, JSON.stringify(r));
     const det = await fetch(`${BASE}/api/products/${product.id}`).then(j);
     assert(det.product.stock === posStockBefore, "stock not restored after return");
@@ -269,6 +297,136 @@ async function run() {
     assert(html.includes('href="/track"'), "no /track link in store markup");
     assert(html.includes("wa.me/964"), "no whatsapp link from env phone");
     return "/track + wa.me ✓";
+  });
+
+  // 25) تتبع بلا جلسة: رد مخفّف بلا اسم أو عنوان أو إجمالي أو قطع كاملة
+  await test("تتبع بلا جلسة يُخفي الاسم والعنوان والإجمالي", async () => {
+    assert(orderCode, "no order code captured");
+    const r = await fetch(`${BASE}/api/track?phone=${QA_PHONE}&code=${orderCode}`);
+    assert(r.status === 200, `got ${r.status}`);
+    const d = await r.json();
+    const o = d.orders?.[0];
+    assert(o && o.code === orderCode, "order missing");
+    assert(!("customerName" in o) && !("total" in o) && !("address" in o) && !("items" in o), "private fields leaked");
+    return "الحالة والقطع فقط ✓";
+  });
+
+  // 26) قائمة الطلبات بالهاتف بلا جلسة مرفوضة
+  await test("الطلبات بلا جلسة مرفوضة (401)", async () => {
+    const r = await fetch(`${BASE}/api/orders`);
+    assert(r.status === 401, `got ${r.status}`);
+    return "401 ✓";
+  });
+
+  // 27) جلسة الزبون الحقيقية من الخادم + محفظة العناوين
+  await test("جلسة الزبون من الخادم + عنوان محفوظ", async () => {
+    const anon = await fetch(`${BASE}/api/customer/me`).then(j);
+    assert(anon.customer === null, `anonymous leaked customer: ${JSON.stringify(anon)}`);
+    const me = await fetch(`${BASE}/api/customer/me`, { headers: { cookie: custCookie } }).then(j);
+    assert(me.customer?.phone === QA_PHONE, JSON.stringify(me));
+
+    const add = await fetch(`${BASE}/api/customer/addresses`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: custCookie },
+      body: JSON.stringify({ governorate: "بغداد", detail: "المنصور — قرب حديقة QA" }),
+    }).then(j);
+    assert(add.ok && add.address?.id, JSON.stringify(add));
+
+    const list = await fetch(`${BASE}/api/customer/addresses`, { headers: { cookie: custCookie } }).then(j);
+    assert(list.addresses.some((a) => a.id === add.address.id), "address missing");
+
+    const del = await fetch(`${BASE}/api/customer/addresses?id=${add.address.id}`, {
+      method: "DELETE",
+      headers: { cookie: custCookie },
+    });
+    assert(del.ok, "address delete failed");
+    return "me + عنوان CRUD ✓";
+  });
+
+  // 28) المفضلة على الخادم
+  await test("المفضلة تُحفظ على الخادم", async () => {
+    const add = await fetch(`${BASE}/api/customer/favorites`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: custCookie },
+      body: JSON.stringify({ productId: product.id }),
+    }).then(j);
+    assert(add.ok, JSON.stringify(add));
+    const list = await fetch(`${BASE}/api/customer/favorites`, { headers: { cookie: custCookie } }).then(j);
+    assert(list.favorites.some((p) => p.id === product.id), "favorite missing");
+    return `${list.favorites.length} مفضلة ✓`;
+  });
+
+  // 29) حد استخدام الكوبون محفوظ ويُحتسب
+  await test("حد استخدام الكوبون محفوظ ومحتسب", async () => {
+    const list = await fetch(`${BASE}/api/coupons`, { headers: { cookie: adminCookie } }).then(j);
+    const w = list.coupons.find((c) => c.code === "WELCOME10");
+    assert(w && typeof w.usedCount === "number", "no usedCount for admin");
+    assert(w.usedCount >= 1, `usedCount ${w.usedCount}`);
+    assert("maxUses" in w, "no maxUses field");
+    const created = await fetch(`${BASE}/api/coupons`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ code: `QAONCE${Date.now().toString().slice(-5)}`, type: "fixed", value: 1000, maxUses: 1 }),
+    }).then(j);
+    assert(created.coupon?.maxUses === 1, "maxUses not persisted");
+    return `WELCOME10 استُخدم ${w.usedCount} مرة`;
+  });
+
+  // 30) حسابات الموظفين (RBAC): إنشاء + فتح وردية بالرمز
+  await test("RBAC — حساب موظف وفتح وردية برمز PIN", async () => {
+    const staffPin = "4821";
+    const created = await fetch(`${BASE}/api/admin/staff`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ name: "QA كاشير", role: "cashier", branchId: 1, pin: staffPin }),
+    }).then(j);
+    assert(created.staff?.id, JSON.stringify(created));
+
+    const bad = await fetch(`${BASE}/api/pos/shift`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ action: "open", branchId: 1, staffId: created.staff.id, pin: "0000" }),
+    });
+    assert(bad.status === 401, `wrong pin got ${bad.status}`);
+
+    const ok = await fetch(`${BASE}/api/pos/shift`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ action: "open", branchId: 1, staffId: created.staff.id, pin: staffPin, openingCash: 25000 }),
+    });
+    const d = await ok.json();
+    assert(ok.ok && d.shift?.staffName === "QA كاشير", JSON.stringify(d));
+    assert(d.shift.role === "cashier", "role not derived from account");
+
+    // الاسم وحده لم يعد يكفي لفرع له حسابات
+    const byName = await fetch(`${BASE}/api/pos/shift`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ action: "open", branchId: 1, staffName: "متحايل", role: "cashier" }),
+    });
+    assert(byName.status === 403, `name-only shift got ${byName.status}`);
+    return `وردية #${d.shift.id} بالرمز ✓ والاسم وحده مرفوض`;
+  });
+
+  // 31) رفع الصور محمي بالإدارة
+  await test("رفع الصور محمي بجلسة الإدارة (401)", async () => {
+    const fd = new FormData();
+    fd.append("file", new Blob(["qa"], { type: "image/png" }), "qa.png");
+    const r = await fetch(`${BASE}/api/uploads`, { method: "POST", body: fd });
+    assert(r.status === 401, `got ${r.status}`);
+    return "401 ✓";
+  });
+
+  // 32) سجل التدقيق يسجّل العمليات الحسّاسة ولا يُقرأ بلا إدارة
+  await test("سجل التدقيق يسجّل العمليات الحسّاسة", async () => {
+    const r = await fetch(`${BASE}/api/admin/audit?limit=200`, { headers: { cookie: adminCookie } }).then(j);
+    const actions = new Set((r.entries ?? []).map((e) => e.action));
+    for (const a of ["admin.login", "order.status", "pos.sale", "staff.create"]) {
+      assert(actions.has(a), `missing audit action: ${a}`);
+    }
+    const anon = await fetch(`${BASE}/api/admin/audit`);
+    assert(anon.status === 401, `audit readable without admin: ${anon.status}`);
+    return `${r.entries.length} سجل ✓`;
   });
 
   // ── النتائج ──

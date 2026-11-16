@@ -1,10 +1,12 @@
 import { db } from "@/db";
-import { orderItems, orders, products } from "@/db/schema";
+import { coupons, orderItems, orders, products } from "@/db/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { isValidIraqiPhone } from "@/lib/format";
 import { computeDeliveryFee, getCouponDiscount, nextOrderCode } from "@/lib/order-utils";
 import { checkRateLimit, clientKey, rateLimited } from "@/lib/rate-limit";
+import { customerFromRequest, isSameOrigin } from "@/lib/session";
+import { sendOrderNotifications } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const rl = checkRateLimit(clientKey(req, "orders"), 10, 60_000);
   if (!rl.allowed) return rateLimited(rl.retryAfterSec);
+  if (!isSameOrigin(req)) return Response.json({ error: "طلب غير موثوق" }, { status: 403 });
   try {
     const body = await req.json();
     const { customerName, phone, governorate, district, address, notes, paymentMethod, couponCode } = body as {
@@ -59,7 +62,8 @@ export async function POST(req: NextRequest) {
     if (!lines.length) return Response.json({ error: "المنتجات غير متوفرة" }, { status: 400 });
 
     const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
-    const { discount } = await getCouponDiscount(couponCode ?? null, subtotal);
+    const coupon = await getCouponDiscount(couponCode ?? null, subtotal);
+    const discount = coupon.discount;
     const deliveryFee = await computeDeliveryFee(governorate);
     const total = subtotal - discount + deliveryFee;
     const code = await nextOrderCode("SG");
@@ -92,12 +96,19 @@ export async function POST(req: NextRequest) {
             payments: [{ method: paymentMethod ?? "cod", amount: total }],
             subtotal,
             discountTotal: discount,
-            couponCode: discount > 0 ? (couponCode ?? null) : null,
+            couponCode: discount > 0 ? (coupon.coupon?.code ?? null) : null,
             deliveryFee,
             total,
           })
           .returning();
         await tx.insert(orderItems).values(lines.map((l) => ({ ...l, orderId: ord.id })));
+        // استهلاك الكوبون داخل نفس المعاملة — لا يتجاوز حد الاستخدام
+        if (discount > 0 && coupon.coupon) {
+          await tx
+            .update(coupons)
+            .set({ usedCount: sql`${coupons.usedCount} + 1` })
+            .where(eq(coupons.id, coupon.coupon.id));
+        }
         return ord;
       });
     } catch (e) {
@@ -112,9 +123,15 @@ export async function POST(req: NextRequest) {
 
     const paymentStatus = (paymentMethod ?? "cod") === "cod"
       ? { mode: "cod" as const, note: "الدفع نقداً عند الاستلام بعد تأكيد الطلب هاتفياً" }
-      : (paymentMethod === "split"
-          ? { mode: "split" as const, note: "دفعة مقسّمة سُجّلت عند البيع" }
-          : { mode: "gateway_pending" as const, note: "سيتواصل فريق باربي لإتمام الدفع الإلكتروني — الربط المباشر بالبوابة يتطلب اعتمادات الإنتاج دون ادعاء نجاح" });
+      : { mode: "gateway_pending" as const, note: "سيتواصل فريق باربي لإتمام الدفع الإلكتروني — الربط المباشر بالبوابة يتطلب اعتمادات الإنتاج" };
+
+    // إشعارات حقيقية: تُرسل فعلاً وتُبلَّغ نتيجتها، ولا ندّعي إرسالاً لم يحدث
+    const notifications = await sendOrderNotifications({
+      phone: order.phone,
+      customerName: order.customerName,
+      code: order.code,
+      total: order.total,
+    });
 
     return Response.json({
       ok: true,
@@ -134,11 +151,7 @@ export async function POST(req: NextRequest) {
         paymentMethod: order.paymentMethod,
         createdAt: order.createdAt.toISOString(),
       },
-      notifications: {
-        sms: true,
-        whatsapp: true,
-        message: `باربي: تم استلام طلبك ${code} بقيمة ${total.toLocaleString("en-US")} د.ع. سنتصل بك للتأكيد.`,
-      },
+      notifications,
     });
   } catch (err) {
     console.error(err);
@@ -146,12 +159,29 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** GET ?phone=07xxxxxxxxx → customer's orders with items */
+/**
+ * GET → طلبات الزبون الحالي من جلسة OTP الموقّعة.
+ * لا يُقبل رقم هاتف في الرابط: من يعرف رقماً لا يحق له رؤية عنوان واسم وطلبات صاحبه.
+ */
 export async function GET(req: NextRequest) {
-  const phone = req.nextUrl.searchParams.get("phone")?.trim();
-  if (!phone) return Response.json({ orders: [] });
-  const rows = await db.select().from(orders).where(eq(orders.phone, phone)).orderBy(desc(orders.createdAt)).limit(50);
+  const session = customerFromRequest(req);
+  if (!session) {
+    return Response.json(
+      { error: "وثّق رقمك أولاً برمز SMS لعرض طلباتك", needsVerification: true },
+      { status: 401 }
+    );
+  }
+  const rl = checkRateLimit(clientKey(req, "orders-list"), 60, 60_000);
+  if (!rl.allowed) return rateLimited(rl.retryAfterSec);
+
+  const rows = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.phone, session.phone))
+    .orderBy(desc(orders.createdAt))
+    .limit(50);
   if (!rows.length) return Response.json({ orders: [] });
+
   const ids = rows.map((r) => r.id);
   const items = await db.select().from(orderItems).where(inArray(orderItems.orderId, ids));
   const byOrder = new Map<number, typeof items>();
@@ -164,7 +194,7 @@ export async function GET(req: NextRequest) {
     orders: rows.map((r) => ({
       ...r,
       createdAt: r.createdAt.toISOString(),
-      items: (byOrder.get(r.id) ?? []).map((i) => ({ ...i })),
+      items: byOrder.get(r.id) ?? [],
     })),
   });
 }

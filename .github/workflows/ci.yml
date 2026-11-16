@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/app_db
+      NEXT_PUBLIC_BASE_URL: http://127.0.0.1:3000
+      ADMIN_PIN: "2024"
+      ADMIN_SESSION_SECRET: ci-only-session-secret
+      OTP_DEV_ECHO: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Create database schema
+        run: npx drizzle-kit push --force
+
+      - name: Build
+        run: npm run build
+
+      - name: Start server
+        run: |
+          npm start > server.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3000/api/health && break
+            sleep 2
+          done
+
+      - name: Seed demo data as admin
+        # يُرسل الكوكي صراحةً من ردّ الدخول: كوكي Secure لا يعود مع HTTP عبر جرة curl
+        run: |
+          TOKEN=$(curl -si -H "Content-Type: application/json" -d "{\"pin\":\"$ADMIN_PIN\"}" http://127.0.0.1:3000/api/admin/login | tr -d '\r' | sed -n 's/^[Ss]et-[Cc]ookie: barbi_admin=\([^;]*\).*/\1/p')
+          test -n "$TOKEN"
+          curl -s -X POST -H "Cookie: barbi_admin=$TOKEN" http://127.0.0.1:3000/api/seed
+          echo
+
+      - name: Critical workflow tests
+        run: node scripts/api-tests.mjs
+
+      - name: Server log on failure
+        if: failure()
+        run: cat server.log || true

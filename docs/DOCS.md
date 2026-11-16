@@ -48,28 +48,34 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 | Method | Path | الوصف |
 |---|---|---|
 | POST | `/api/orders` | إنشاء طلب — `{customerName, phone(07XXXXXXXXX), governorate, district?, address, paymentMethod, couponCode?, items:[{productId,qty,size,color}]}` → يرجع فاتورة رقمية + إشعارات SMS/واتساب |
-| GET | `/api/orders?phone=` | طلبات الزبون (تتبع الحالات) |
+| GET | `/api/orders` | طلبات الزبون الحالي — بجلسة OTP موقّعة فقط (لا رقم هاتف في الرابط) |
 | PATCH | `/api/orders/[id]` | تحديث حالة: `pending processing shipped out_for_delivery delivered cancelled returned` |
 | POST | `/api/coupons/validate` | `{code, subtotal}` → `{valid, discount, message}` |
 | GET/POST/PATCH/DELETE | `/api/coupons` | إدارة الكوبونات |
 | GET/PATCH | `/api/delivery` | رسوم التوصيل لكل محافظة |
 
 ### المصادقة
-- `POST /api/auth/otp {action:'send', phone}` — يرسل SMS (البيئة الحالية ترجع `devCode:"1234"`).
-- `POST /api/auth/otp {action:'verify', phone, code, name?}` — ينشئ/يرجع الحساب.
+- `POST /api/auth/otp {action:'send', phone}` — يرسل SMS. في التطوير (أو `OTP_DEV_ECHO=1`) يرجع `devCode`؛ في الإنتاج بلا مزود SMS يرجع 503 ولا يكشف الرمز.
+- `POST /api/auth/otp {action:'verify', phone, code, name?}` — ينشئ/يرجع الحساب ويضبط كوكي جلسة موقّعة.
+- `GET /api/customer/me` — الزبون الحالي من الجلسة أو `{customer:null}`. `DELETE` — خروج.
+- `GET/POST/DELETE /api/customer/addresses` — عناوين محفوظة على الخادم (تتبع الزبونة بين الأجهزة).
+- `GET/POST /api/customer/favorites` — مفضلة على الخادم بالأسعار الحالية.
 
 ### الكاشير POS
 | Method | Path | الوصف |
 |---|---|---|
-| GET | `/api/pos/shift?branchId=` | الوردية المفتوحة + الفروع |
-| POST | `/api/pos/shift` | `{action:'open'|'close', staffName, role, openingCash/closingCash}` |
-| POST | `/api/pos/sale` | فاتورة بيع مع **دفع مقسّم** `{payments:[{method:'cash'|zaincash|fib|qicard|asiahawala|fastpay|huaweipay, amount}]}`، خصم يدوي `{mode,value}`، كوبون — يخصم المخزون فوراً |
+| GET | `/api/pos/shift?branchId=` | الوردية المفتوحة + الفروع + حسابات موظفي الفرع (بلا رموز) + الجلسة |
+| POST | `/api/pos/shift` | `{action:'open', staffId, pin, openingCash}` — يشتق الاسم والدور من الحساب. `{action:'close', shiftId, closingCash}` لمشرف/مدير |
+| POST | `/api/pos/sale` | فاتورة بيع مع **دفع مقسّم** `{payments:[{method:'cash'|zaincash|fib|qicard|asiahawala|fastpay|huaweipay, amount}]}`، خصم يدوي `{mode,value}` (مشرف+)، كوبون — يخصم المخزون فوراً |
 | GET | `/api/pos/sale?branchId=` | آخر فواتير الفرع (للمرتجعات) |
 | GET | `/api/pos/report?date=YYYY-MM-DD&branchId=` | تقرير يومي: عدد الفواتير، الإجمالي، تفصيل البوابات، المرتجعات، الصافي |
 
 ### الإدارة
 - `GET /api/admin/stats` — بطاقات + سلسلة 14 يوم + بوابات الدفع + المحافظات + أفضل المنتجات + مخزون منخفض.
 - `POST /api/admin/stats {status}` — قائمة الطلبات المفلترة. `PATCH` — `{productId, add}` لإعادة التخزين.
+- `GET/POST/PATCH/DELETE /api/admin/staff` — حسابات الموظفين: الاسم والدور والفرع ورمز PIN (4–8 أرقام، يُخزَّن scrypt). لا يُعاد أي hash.
+- `GET /api/admin/audit?limit=&q=` — سجل التدقيق (الأحدث أولاً، للقراءة فقط).
+- `POST /api/uploads` — رفع صورة منتج (multipart، JPG/PNG/WebP حتى 6MB) → `/api/uploads/[id]`.
 
 ### رصد السوق (Google Search عبر Serper)
 - `POST /api/web-search` — `{q, range?: day|week|month|year|all, gl?="iq", hl?="ar", num?=10}` → نتائج عضوية + People Also Ask + عمليات بحث مرتبطة. يظهر للإدارة في تبويب **رصد السوق** داخل `/admin`.
@@ -93,11 +99,12 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 
 ## 5. خطة النشر
 
-1. **سيرفر**: VPS العراق/المنطقة (أو AWS me-south) — Docker: Next.js + Postgres + Redis خلف Nginx مع SSL (Let's Encrypt) — البودات كلها HTTPS.
-2. **سكالبج**: نسخة واحدة تكفي في البداية؛ صعد لـ PM2/Kubernetes عند الحمل.
+1. **سيرفر**: VPS العراق/المنطقة (أو AWS me-south) — Docker: Next.js + Postgres خلف Nginx مع SSL (Let's Encrypt) — البودات كلها HTTPS. صورة `Dockerfile` جاهزة.
+2. **سكالبج**: نسخة واحدة تكفي في البداية؛ عند التعدد اضبط `UPSTASH_REDIS_REST_URL/TOKEN` ليكون حد المعدل مشتركاً، ثم Kubernetes.
 3. **iOS/Android**: كود Flutter موحد يستهلك نفس الـ API ويفتح عبر App Store Connect وPlay Console (أسماء: "باربي BARBI"). حتى الإطلاق، الـ PWA يعطي نفس التجربة: "إضافة إلى الشاشة الرئيسية".
-4. **إشعارات**: Firebase Cloud Messaging لتوكنات التطبيق/PWA.
-5. **النسخ الاحتياطي**: `pg_dump` يومي إلى S3.
+4. **إشعارات Push**: لم تُنفّذ بعد — تحتاج مفاتيح Firebase وكود إرسال (لا توجد متغيرات معلنة بلا كود).
+5. **النسخ الاحتياطي**: `pg_dump` يومي إلى تخزين خارجي.
+6. **المراقبة**: Sentry/uptime + تنبيه على `audit_logs` (محاولات دخول فاشلة متكررة).
 
 ## 6. خصوصية السوق العراقي (مطبقة)
 

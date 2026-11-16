@@ -32,6 +32,7 @@ export const ORDER_STATUS_META: Record<
   shipped: { label: "تم الشحن", tint: "lilac", step: 3 },
   out_for_delivery: { label: "قيد التوصيل", tint: "lilac", step: 4 },
   delivered: { label: "تم التسليم", tint: "minty", step: 5 },
+  return_requested: { label: "طلب إرجاع", tint: "blush", step: 5 },
   cancelled: { label: "ملغي", tint: "gray", step: 0 },
   returned: { label: "مرتجع", tint: "blush", step: 0 },
 };
@@ -43,6 +44,7 @@ export const ORDER_STATUS_TONE: Record<string, string> = {
   shipped: "bg-lilac-100 text-lilac-700",
   out_for_delivery: "bg-lilac-200 text-lilac-700",
   delivered: "bg-minty-100 text-minty-700",
+  return_requested: "bg-butter-200 text-butter-700",
   cancelled: "bg-gray-100 text-gray-500",
   returned: "bg-blush-100 text-blush-700",
 };

@@ -3,13 +3,17 @@ import { coupons, deliveryFees, orders } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function getCouponDiscount(code: string | null | undefined, subtotal: number) {
-  if (!code) return { discount: 0, coupon: null };
+  if (!code) return { discount: 0, coupon: null, reason: null as string | null };
   const [c] = await db.select().from(coupons).where(eq(coupons.code, code.toUpperCase())).limit(1);
-  if (!c || !c.active) return { discount: 0, coupon: null };
-  if (c.expiresAt && c.expiresAt < new Date()) return { discount: 0, coupon: null };
-  if (subtotal < c.minSubtotal) return { discount: 0, coupon: null };
+  if (!c || !c.active) return { discount: 0, coupon: null, reason: "كود الخصم غير موجود أو غير مفعّل" };
+  if (c.expiresAt && c.expiresAt < new Date())
+    return { discount: 0, coupon: null, reason: "انتهت صلاحية هذا الكود" };
+  if (c.maxUses !== null && c.usedCount >= c.maxUses)
+    return { discount: 0, coupon: null, reason: "انتهى عدد استخدامات هذا الكود" };
+  if (subtotal < c.minSubtotal)
+    return { discount: 0, coupon: null, reason: "الطلب أقل من الحد الأدنى للكود" };
   const discount = c.type === "percent" ? Math.round((subtotal * c.value) / 100) : c.value;
-  return { discount: Math.min(discount, subtotal), coupon: c };
+  return { discount: Math.min(discount, subtotal), coupon: c, reason: null as string | null };
 }
 
 export async function computeDeliveryFee(governorate: string | null | undefined) {
