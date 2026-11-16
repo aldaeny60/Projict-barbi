@@ -522,10 +522,25 @@ async function run() {
 
   // 37) صفحة الزبائن في الإدارة مع مؤشراتهم
   await test("قائمة الزبائن في الإدارة", async () => {
+    // طلب جديد غير ملغي حتى يكون الإنفاق الصافي أكبر من صفر
+    const placed = await fetch(`${BASE}/api/orders`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        customerName: "QA spent",
+        phone: QA_PHONE,
+        governorate: "بغداد",
+        address: "QA spent",
+        items: [{ productId: idemP.id, qty: 1 }],
+      }),
+    }).then(j);
+    assert(placed.ok, JSON.stringify(placed));
+
     const r = await fetch(`${BASE}/api/admin/customers`, { headers: { cookie: adminCookie } }).then(j);
     const me = (r.customers ?? []).find((c) => c.phone === QA_PHONE);
     assert(me, "QA customer missing");
-    assert(me.ordersCount >= 2 && me.totalSpent > 0, JSON.stringify(me));
+    assert(me.ordersCount >= 2, JSON.stringify(me));
+    assert(me.totalSpent > 0, `totalSpent ${me.totalSpent}`);
     const anon = await fetch(`${BASE}/api/admin/customers`);
     assert(anon.status === 401, `anon got ${anon.status}`);
     return `${r.customers.length} زبون ✓`;
