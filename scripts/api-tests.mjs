@@ -233,6 +233,44 @@ async function run() {
     return "429 على المحاولة 6/5";
   });
 
+  // 21) صفحة تتبع الطلب العامة (بدون تسجيل دخول)
+  await test("صفحة /track لتتبع الطلب", async () => {
+    const r = await fetch(`${BASE}/track?phone=${QA_PHONE}`);
+    const html = await r.text();
+    assert(r.status === 200, `got ${r.status}`);
+    assert(html.includes("وين وصل طلبي"), "track page markup missing");
+    return `200 ✓ — ${QA_PHONE}`;
+  });
+
+  // 22) صفحة الاحتياط عند انقطاع الشبكة
+  await test("صفحة /offline بدون اتصال", async () => {
+    const r = await fetch(`${BASE}/offline`);
+    const html = await r.text();
+    assert(r.status === 200 && html.includes("ما عندج اتصال"), `got ${r.status}`);
+    return "200 ✓";
+  });
+
+  // 23) عامل الخدمة + أيقونات PWA (تثبيت حقيقي على الشاشة الرئيسية)
+  await test("عامل خدمة PWA + أيقونات 192/512", async () => {
+    const sw = await fetch(`${BASE}/sw.js`);
+    const swBody = await sw.text();
+    assert(sw.ok && swBody.includes("barbi-v1") && swBody.includes("/offline"), "service worker missing");
+    const man = await (await fetch(`${BASE}/manifest.webmanifest`)).json();
+    const sizes = (man.icons ?? []).map((i) => i.sizes);
+    assert(sizes.includes("192x192") && sizes.includes("512x512"), `icons: ${sizes.join(",")}`);
+    const icon = await fetch(`${BASE}/icons/icon-192.png`);
+    assert(icon.ok && (icon.headers.get("content-type") || "").includes("image/png"), "png icon missing");
+    return "sw + 192/512 ✓";
+  });
+
+  // 24) ربط المتجر بصفحة التتبع وزر واتساب (من متغيرات البيئة)
+  await test("روابط /track وواتساب بالمتجر", async () => {
+    const html = await (await fetch(`${BASE}/`)).text();
+    assert(html.includes('href="/track"'), "no /track link in store markup");
+    assert(html.includes("wa.me/964"), "no whatsapp link from env phone");
+    return "/track + wa.me ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");
