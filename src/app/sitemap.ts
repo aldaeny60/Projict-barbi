@@ -1,0 +1,26 @@
+import { db } from "@/db";
+import { products } from "@/db/schema";
+import type { MetadataRoute } from "next";
+
+export const dynamic = "force-dynamic";
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const base = process.env.NEXT_PUBLIC_BASE_URL ?? "https://sighar.iq";
+  let productUrls: MetadataRoute.Sitemap = [];
+  try {
+    const rows = await db.select({ id: products.id, createdAt: products.createdAt }).from(products);
+    productUrls = rows.map((p) => ({
+      url: `${base}/product/${p.id}`,
+      lastModified: p.createdAt,
+      changeFrequency: "weekly",
+      priority: 0.8,
+    }));
+  } catch {
+    /* db not ready */
+  }
+  return [
+    { url: base, changeFrequency: "daily", priority: 1 },
+    { url: `${base}/shop`, changeFrequency: "daily", priority: 0.9 },
+    ...productUrls,
+  ];
+}

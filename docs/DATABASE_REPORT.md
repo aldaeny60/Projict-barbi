@@ -1,0 +1,2 @@
+# DATABASE_REPORT — وكيل 05
+VERIFIED: 11 جدولاً (categories, products, reviews, customers, orders, order_items, coupons, delivery_fees, branches, shifts) بفهارس على الفئات/الأسماء/تواريخ الطلبات/الهواتف؛ مفاتيح أجنبية بـ cascade حيث يلزم؛ معاملات: إنشاء طلب ويب، بيع POS بقفل `stock>=qty`، استرداد مخزون عند الانتقال الطرفي منعاً للازدواج؛ JSONB للألوان/المقاسات/أجزاء الدفع؛ نسخ احتياطي: pg_dump يومي (دليل في RELEASE_CHECKLIST)؛ لا حذف خطير بدون حماية (LAW 010: حذف المنتجات للمدير فقط).
