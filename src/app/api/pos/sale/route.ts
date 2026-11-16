@@ -1,8 +1,8 @@
 import { db } from "@/db";
-import { branches, coupons, orderItems, orders, products } from "@/db/schema";
+import { branches, coupons, orderEvents, orderItems, orders, products } from "@/db/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
-import { getCouponDiscount, nextOrderCode } from "@/lib/order-utils";
+import { cleanRequestKey, getCouponDiscount, nextOrderCode } from "@/lib/order-utils";
 import { ipOf, logAudit } from "@/lib/audit";
 import { checkRateLimit, clientKey, rateLimited } from "@/lib/rate-limit";
 import { isSameOrigin, staffAtLeast, staffFromRequest } from "@/lib/session";
@@ -12,6 +12,37 @@ export const dynamic = "force-dynamic";
 
 type PosLine = { productId: number; qty: number; size?: string; color?: string };
 type PosPayment = { method: string; amount: number };
+
+/** فاتورة موجودة مسبقاً بنفس مفتاح الطلب — لا نبيع مرتين */
+async function duplicateSale(order: typeof orders.$inferSelect) {
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
+  const [branch] = order.branchId
+    ? await db.select().from(branches).where(eq(branches.id, order.branchId)).limit(1)
+    : [];
+  return Response.json({
+    ok: true,
+    duplicate: true,
+    invoice: {
+      code: order.code,
+      branch: branch?.name ?? "فرع باربي",
+      staffName: order.staffName ?? "كاشير",
+      items,
+      subtotal: order.subtotal,
+      discountTotal: order.discountTotal,
+      couponCode: order.couponCode,
+      total: order.total,
+      payments: order.payments,
+      changeDue: 0,
+      createdAt: order.createdAt.toISOString(),
+    },
+    notifications: {
+      sms: "skipped",
+      whatsapp: "link",
+      message: `الفاتورة ${order.code} مسجّلة مسبقاً — لم تُنشأ فاتورة جديدة`,
+      reason: "duplicate-request",
+    },
+  });
+}
 
 /**
  * POST — إنشاء فاتورة كاشير
@@ -36,8 +67,15 @@ export async function POST(req: NextRequest) {
     const rawItems = (body.items ?? []) as PosLine[];
     const payments = (body.payments ?? []) as PosPayment[];
     const manual = body.discount as { mode?: string; value?: number } | undefined;
+    const requestKey = cleanRequestKey(body.requestId);
 
     if (!rawItems.length) return Response.json({ error: "أضف منتجات للفاتورة أولاً" }, { status: 400 });
+
+    // إعادة إرسال نفس الفاتورة (من طابور الأوفلاين أو ضغط مزدوج) لا تبيع مرتين
+    if (requestKey) {
+      const [existing] = await db.select().from(orders).where(eq(orders.requestKey, requestKey)).limit(1);
+      if (existing) return duplicateSale(existing);
+    }
 
     // الخصم اليدوي صلاحية مشرف/مدير — الكاشير لا يخصم بنفسه
     if (manual?.value) {
@@ -122,9 +160,17 @@ export async function POST(req: NextRequest) {
             branchId,
             shiftId,
             staffName,
+            requestKey,
           })
           .returning();
         await tx.insert(orderItems).values(lines.map((l) => ({ ...l, orderId: ord.id })));
+        await tx.insert(orderEvents).values({
+          orderId: ord.id,
+          fromStatus: null,
+          toStatus: "delivered",
+          actor: staffName,
+          role: session.role,
+        });
         // استهلاك الكوبون في نفس المعاملة — يحفظ حد الاستخدام موحّداً بين الويب والكاشير
         if (couponDiscount > 0 && coupon.coupon) {
           await tx
@@ -137,6 +183,10 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       if ((e as Error).message.startsWith("OUT_OF_STOCK:")) {
         return Response.json({ error: `المخزون لا يكفي: ${(e as Error).message.split(":")[1]}` }, { status: 409 });
+      }
+      if (requestKey && (e as { code?: string }).code === "23505") {
+        const [existing] = await db.select().from(orders).where(eq(orders.requestKey, requestKey)).limit(1);
+        if (existing) return duplicateSale(existing);
       }
       throw e;
     }

@@ -9,6 +9,7 @@ import {
   shifts,
   orders,
   orderItems,
+  orderEvents,
   customers,
 } from "@/db/schema";
 import { sql } from "drizzle-orm";
@@ -232,6 +233,13 @@ export async function GET(req: NextRequest) {
         })
         .returning();
       await db.insert(orderItems).values(items.map((it) => ({ ...it, orderId: ord.id })));
+      await db.insert(orderEvents).values({
+        orderId: ord.id,
+        fromStatus: null,
+        toStatus: status,
+        actor: isPos ? (ord.staffName ?? "كاشير") : ord.customerName,
+        role: isPos ? "cashier" : "customer",
+      });
     }
 
     await logAudit({ actor: "seed", role: "system", ip: ipOf(req) }, "seed.run", null, {

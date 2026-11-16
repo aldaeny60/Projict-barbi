@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { categories, products } from "@/db/schema";
-import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { toProductDTO } from "@/lib/dto";
 import { adminUnauthorized, isAdminAuthed } from "@/lib/admin-auth";
@@ -16,7 +16,12 @@ export async function GET(req: NextRequest) {
   const sort = sp.get("sort") ?? "newest";
   const deals = sp.get("deals") === "1";
   const isNew = sp.get("new") === "1";
+  const minPrice = Number(sp.get("minPrice"));
+  const maxPrice = Number(sp.get("maxPrice"));
+  const size = sp.get("size")?.trim();
+  const color = sp.get("color")?.trim();
   const limit = Math.min(Number(sp.get("limit")) || 48, 100);
+  const offset = Math.max(0, Number(sp.get("offset")) || 0);
 
   const allCats = await db.select().from(categories);
   const catById = new Map(allCats.map((c) => [c.id, c]));
@@ -35,6 +40,11 @@ export async function GET(req: NextRequest) {
   }
   if (deals) conds.push(isNotNull(products.compareAtPrice));
   if (isNew) conds.push(eq(products.isNew, true));
+  if (Number.isFinite(minPrice) && minPrice > 0) conds.push(gte(products.price, Math.round(minPrice)));
+  if (Number.isFinite(maxPrice) && maxPrice > 0) conds.push(lte(products.price, Math.round(maxPrice)));
+  // jsonb containment: المقاس داخل مصفوفة sizes، واللون ككائن جزئي داخل colors
+  if (size) conds.push(sql`${products.sizes}::jsonb @> ${JSON.stringify([size])}::jsonb`);
+  if (color) conds.push(sql`${products.colors}::jsonb @> ${JSON.stringify([{ name: color }])}::jsonb`);
 
   const orderBy =
     sort === "price_asc"
@@ -52,15 +62,22 @@ export async function GET(req: NextRequest) {
     .from(products)
     .where(conds.length ? and(...conds) : undefined)
     .orderBy(...orderBy)
-    .limit(limit);
+    .limit(limit)
+    .offset(offset);
 
   let dtos = rows.map((p) => toProductDTO(p, catById.get(p.categoryId)));
   if (sort === "deals" || deals) {
     dtos = dtos.sort((a, b) => (b.discountPct ?? 0) - (a.discountPct ?? 0) || b.soldCount - a.soldCount);
   }
+  const [countRow] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(products)
+    .where(conds.length ? and(...conds) : undefined);
   return Response.json({
     products: dtos,
-    total: (await db.select({ n: sql<number>`count(*)` }).from(products))[0]?.n ?? rows.length,
+    total: Number(countRow?.n ?? dtos.length),
+    offset,
+    limit,
   });
 }
 

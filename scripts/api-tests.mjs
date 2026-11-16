@@ -397,6 +397,7 @@ async function run() {
     const d = await ok.json();
     assert(ok.ok && d.shift?.staffName === "QA كاشير", JSON.stringify(d));
     assert(d.shift.role === "cashier", "role not derived from account");
+    staffCookie = (ok.headers.get("set-cookie") || "").split(";")[0] || staffCookie;
 
     // الاسم وحده لم يعد يكفي لفرع له حسابات
     const byName = await fetch(`${BASE}/api/pos/shift`, {
@@ -427,6 +428,167 @@ async function run() {
     const anon = await fetch(`${BASE}/api/admin/audit`);
     assert(anon.status === 401, `audit readable without admin: ${anon.status}`);
     return `${r.entries.length} سجل ✓`;
+  });
+
+  // 33) idempotency: نفس المفتاح لا يُنشئ طلبين ولا يخصم المخزون مرتين
+  let idemOrderId = null, idemStockBefore = 0, idemP = null, deliveredStock = 0;
+  await test("منع تكرار الطلب (idempotency)", async () => {
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    idemP = all.products.find((x) => x.stock >= 5) || product;
+    idemStockBefore = idemP.stock;
+    const payload = {
+      customerName: "QA idem",
+      phone: QA_PHONE,
+      governorate: "بغداد",
+      address: "QA idem",
+      requestId: `QA-IDEM-${Date.now()}`,
+      items: [{ productId: idemP.id, qty: 2, size: idemP.sizes[0], color: idemP.colors[0]?.name }],
+    };
+    const a = await fetch(`${BASE}/api/orders`, { method: "POST", headers: jsonHeaders, body: JSON.stringify(payload) }).then(j);
+    const b = await fetch(`${BASE}/api/orders`, { method: "POST", headers: jsonHeaders, body: JSON.stringify(payload) }).then(j);
+    assert(a.ok && b.ok, JSON.stringify({ a, b }));
+    assert(a.order.id === b.order.id, `two orders: ${a.order.id} / ${b.order.id}`);
+    assert(b.duplicate === true, "second not flagged duplicate");
+    idemOrderId = a.order.id;
+    const after = (await fetch(`${BASE}/api/products/${idemP.id}`).then(j)).product.stock;
+    assert(after === idemStockBefore - 2, `stock ${idemStockBefore} -> ${after}`);
+    return `${a.order.code} مرة واحدة ✓`;
+  });
+
+  // 34) قواعد انتقال الحالة — لا قفز ولا عودة
+  await test("قواعد انتقال حالة الطلب", async () => {
+    assert(idemOrderId, "no order for transitions");
+    const patch = (status) =>
+      fetch(`${BASE}/api/orders/${idemOrderId}`, {
+        method: "PATCH",
+        headers: { ...jsonHeaders, cookie: adminCookie },
+        body: JSON.stringify({ status }),
+      });
+    const jump = await patch("delivered");
+    assert(jump.status === 409, `pending->delivered got ${jump.status}`);
+    for (const s of ["processing", "shipped", "out_for_delivery", "delivered"]) {
+      const r = await patch(s);
+      assert(r.ok, `${s} -> ${r.status}`);
+    }
+    const back = await patch("processing");
+    assert(back.status === 409, `delivered->processing got ${back.status}`);
+    return "409 على القفز والعودة ✓";
+  });
+
+  // 35) سجل الحالات يُسجَّل لكل انتقال
+  await test("سجل حالات الطلب (timeline)", async () => {
+    const d = await fetch(`${BASE}/api/orders/${idemOrderId}`, { headers: { cookie: adminCookie } }).then(j);
+    const ev = d.order?.events ?? [];
+    assert(ev.length >= 5, `events: ${ev.length}`);
+    assert(ev[0].fromStatus === null && ev[0].toStatus === "pending", "creation event missing");
+    assert(ev.some((e) => e.toStatus === "delivered"), "delivered event missing");
+    deliveredStock = (await fetch(`${BASE}/api/products/${idemP.id}`).then(j)).product.stock;
+    return `${ev.length} حدث ✓`;
+  });
+
+  // 36) إرجاع جزئي: الكمية مرتين، والمخزون يُعاد للجزء المسترجع فقط
+  await test("إرجاع جزئي + استعادة مخزون", async () => {
+    const d = await fetch(`${BASE}/api/orders/${idemOrderId}`, { headers: { cookie: adminCookie } }).then(j);
+    const item = d.order.items[0];
+    assert(item && item.qty === 2, "order item missing/incorrect qty");
+
+    const partial = await fetch(`${BASE}/api/orders/${idemOrderId}/returns`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ items: [{ orderItemId: item.id, qty: 1 }], reason: "QA partial" }),
+    }).then(j);
+    assert(partial.ok && partial.fullyReturned === false, JSON.stringify(partial));
+    assert(partial.refund === item.price, `refund ${partial.refund} != ${item.price}`);
+    const afterPartial = (await fetch(`${BASE}/api/products/${idemP.id}`).then(j)).product.stock;
+    assert(afterPartial === deliveredStock + 1, `partial stock ${deliveredStock} -> ${afterPartial}`);
+
+    const tooMany = await fetch(`${BASE}/api/orders/${idemOrderId}/returns`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ items: [{ orderItemId: item.id, qty: 5 }] }),
+    });
+    assert(tooMany.status === 409, `over-return got ${tooMany.status}`);
+
+    const full = await fetch(`${BASE}/api/orders/${idemOrderId}/returns`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ items: [{ orderItemId: item.id, qty: 1 }], reason: "QA rest" }),
+    }).then(j);
+    assert(full.ok && full.fullyReturned === true && full.order.status === "returned", JSON.stringify(full));
+    const afterFull = (await fetch(`${BASE}/api/products/${idemP.id}`).then(j)).product.stock;
+    assert(afterFull === deliveredStock + 2, `full stock ${afterFull}`);
+    return `استرداد ${partial.refund.toLocaleString("en-US")} د.ع ✓`;
+  });
+
+  // 37) صفحة الزبائن في الإدارة مع مؤشراتهم
+  await test("قائمة الزبائن في الإدارة", async () => {
+    const r = await fetch(`${BASE}/api/admin/customers`, { headers: { cookie: adminCookie } }).then(j);
+    const me = (r.customers ?? []).find((c) => c.phone === QA_PHONE);
+    assert(me, "QA customer missing");
+    assert(me.ordersCount >= 2 && me.totalSpent > 0, JSON.stringify(me));
+    const anon = await fetch(`${BASE}/api/admin/customers`);
+    assert(anon.status === 401, `anon got ${anon.status}`);
+    return `${r.customers.length} زبون ✓`;
+  });
+
+  // 38) فلاتر السعر/المقاس/اللون
+  await test("فلاتر المتجر (سعر/مقاس/لون)", async () => {
+    const byPrice = await fetch(`${BASE}/api/products?minPrice=${idemP.price}&maxPrice=${idemP.price}&limit=100`).then(j);
+    assert(byPrice.products.length > 0, "price filter emptied catalog");
+    assert(byPrice.products.every((p) => p.price === idemP.price), "price filter leaked");
+
+    const size = idemP.sizes[0];
+    const bySize = await fetch(`${BASE}/api/products?size=${encodeURIComponent(size)}&limit=100`).then(j);
+    assert(bySize.products.length > 0, "size filter emptied catalog");
+    assert(bySize.products.every((p) => p.sizes.includes(size)), "size filter leaked");
+
+    const color = idemP.colors[0]?.name;
+    if (color) {
+      const byColor = await fetch(`${BASE}/api/products?color=${encodeURIComponent(color)}&limit=100`).then(j);
+      assert(byColor.products.every((p) => p.colors.some((c) => c.name === color)), "color filter leaked");
+    }
+    return `سعر/مقاس${color ? "/لون" : ""} ✓`;
+  });
+
+  // 39) صفحات السياسات + رابط الفوتر
+  await test("صفحات السياسات وروابطها", async () => {
+    for (const p of ["/policies/returns", "/policies/privacy", "/policies/terms"]) {
+      const r = await fetch(`${BASE}${p}`);
+      assert(r.status === 200, `${p} -> ${r.status}`);
+    }
+    const home = await (await fetch(`${BASE}/`)).text();
+    assert(home.includes('href="/policies/privacy"'), "footer policy link missing");
+    return "3 صفحات + رابط الفوتر ✓";
+  });
+
+  // 40) idempotency الكاشير: إعادة إرسال الفاتورة من طابور الأوفلاين لا تبيع مرتين
+  await test("منع تكرار فاتورة الكاشير (idempotency)", async () => {
+    assert(staffCookie, "no staff session");
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const p = all.products.find((x) => x.stock >= 3);
+    assert(p, "no stock for pos idempotency");
+    const before = p.stock;
+    const payload = {
+      requestId: `QA-POS-${Date.now()}`,
+      items: [{ productId: p.id, qty: 1, size: p.sizes[0], color: p.colors[0]?.name }],
+      payments: [{ method: "cash", amount: 999999999 }],
+    };
+    const a = await fetch(`${BASE}/api/pos/sale`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: staffCookie },
+      body: JSON.stringify(payload),
+    }).then(j);
+    const b = await fetch(`${BASE}/api/pos/sale`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: staffCookie },
+      body: JSON.stringify(payload),
+    }).then(j);
+    assert(a.ok && b.ok, JSON.stringify({ a, b }));
+    assert(a.invoice.code === b.invoice.code, `two invoices ${a.invoice.code} / ${b.invoice.code}`);
+    assert(b.duplicate === true, "second pos sale not duplicate");
+    const after = (await fetch(`${BASE}/api/products/${p.id}`).then(j)).product.stock;
+    assert(after === before - 1, `pos stock ${before} -> ${after}`);
+    return `${a.invoice.code} مرة واحدة ✓`;
   });
 
   // ── النتائج ──

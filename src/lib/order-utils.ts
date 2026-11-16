@@ -30,3 +30,13 @@ export async function nextOrderCode(prefix: string) {
   const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(orders);
   return `${prefix}-${10001 + Number(n)}`;
 }
+
+/**
+ * مفتاح تقرير التكرار من العميل: يُقبل إن كان 8–64 حرفاً آمنة، وإلا يُهمَل
+ * (لا نرفض الطلب بسبب مفتاح تالف — نتعامل معه كطلب بلا مفتاح).
+ */
+export function cleanRequestKey(value: unknown): string | null {
+  const key = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(key)) return null;
+  return key;
+}

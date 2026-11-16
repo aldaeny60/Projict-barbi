@@ -318,6 +318,11 @@ function OrdersTab({ orders, reload }: { orders: OrderDTO[] | null; reload: () =
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-black text-blush-600">{formatIQD(o.total)}</span>
+                {(o.refundTotal ?? 0) > 0 && (
+                  <span className="rounded-full bg-blush-50 px-2.5 py-1 text-[10px] font-black text-blush-600">
+                    مسترد {formatIQD(o.refundTotal ?? 0)}
+                  </span>
+                )}
                 {o.status === "delivered" && (
                   <button onClick={() => requestReturn(o.id)} className="rounded-full bg-butter-100 px-3 py-1.5 text-[11px] font-black text-butter-700 hover:bg-butter-200">
                     طلب إرجاع

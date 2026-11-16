@@ -172,6 +172,8 @@ export const orders = pgTable(
     branchId: integer("branch_id"),
     shiftId: integer("shift_id"),
     staffName: varchar("staff_name", { length: 140 }),
+    /** مفتاح idempotency من العميل — يمنع تكرار الطلب/الفاتورة عند إعادة الإرسال */
+    requestKey: varchar("request_key", { length: 64 }).unique(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("orders_created_idx").on(t.createdAt), index("orders_phone_idx").on(t.phone)]
@@ -299,3 +301,65 @@ export const auditLogs = pgTable(
 );
 
 export type AuditLogRow = typeof auditLogs.$inferSelect;
+
+/* ───────────────────────── سجل حالات الطلب ───────────────────────── */
+
+/** كل انتقال حالة يُسجَّل هنا: من → إلى، ومن فعله ومتى — خط زمني حقيقي للطلب */
+export const orderEvents = pgTable(
+  "order_events",
+  {
+    id: serial("id").primaryKey(),
+    orderId: integer("order_id")
+      .references(() => orders.id, { onDelete: "cascade" })
+      .notNull(),
+    fromStatus: varchar("from_status", { length: 24 }),
+    toStatus: varchar("to_status", { length: 24 }).notNull(),
+    actor: varchar("actor", { length: 140 }).notNull(),
+    role: varchar("role", { length: 24 }).notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("order_events_order_idx").on(t.orderId, t.createdAt)]
+);
+
+export type OrderEventRow = typeof orderEvents.$inferSelect;
+
+/* ───────────────────────── المرتجعات (كاملة وجزئية) ───────────────────────── */
+
+/** رأس عملية إرجاع — الطلب الواحد قد يكون له أكثر من مرتجع جزئي */
+export const orderReturns = pgTable(
+  "order_returns",
+  {
+    id: serial("id").primaryKey(),
+    orderId: integer("order_id")
+      .references(() => orders.id, { onDelete: "cascade" })
+      .notNull(),
+    amount: integer("amount").notNull(),
+    reason: text("reason"),
+    actor: varchar("actor", { length: 140 }).notNull(),
+    role: varchar("role", { length: 24 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("order_returns_order_idx").on(t.orderId, t.createdAt)]
+);
+
+export type OrderReturnRow = typeof orderReturns.$inferSelect;
+
+/** بنود المرتجع — الكمية المسترجعة من كل سطر فاتورة */
+export const orderReturnItems = pgTable(
+  "order_return_items",
+  {
+    id: serial("id").primaryKey(),
+    returnId: integer("return_id")
+      .references(() => orderReturns.id, { onDelete: "cascade" })
+      .notNull(),
+    orderItemId: integer("order_item_id")
+      .references(() => orderItems.id, { onDelete: "cascade" })
+      .notNull(),
+    qty: integer("qty").notNull(),
+    amount: integer("amount").notNull(),
+  },
+  (t) => [index("order_return_items_return_idx").on(t.returnId)]
+);
+
+export type OrderReturnItemRow = typeof orderReturnItems.$inferSelect;

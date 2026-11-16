@@ -8,13 +8,13 @@ import {
   LayoutDashboard, Package, ShoppingBag, TicketPercent, Truck, Boxes, Store,
   Lock, Loader2, Plus, Pencil, Trash2, X, Check, Search, AlertTriangle,
   TrendingUp, Banknote, ReceiptText, RefreshCcw, ChevronLeft, Star, Globe,
-  Users, ScrollText, Upload,
+  Users, ScrollText, Upload, RotateCcw,
 } from "lucide-react";
 import { MarketSearchTab } from "@/components/AdminMarketSearch";
 import type { CategoryDTO, CouponDTO, DeliveryFeeDTO, OrderDTO, ProductDTO } from "@/lib/types";
 import { ColorPalette, orderStatusLabel } from "@/lib/admin-helpers";
 import { formatIQD, formatNum, fmtDateTime } from "@/lib/format";
-import { SIZES_ALL } from "@/lib/data";
+import { SIZES_ALL, nextStatuses } from "@/lib/data";
 import { ORDER_STATUSES } from "@/db/schema";
 import { gatewayById } from "@/lib/payments";
 
@@ -34,12 +34,13 @@ type Stats = {
   recentOrders: { id: number; code: string; source: string; customerName: string; governorate: string | null; total: number; status: string; paymentMethod: string; createdAt: string }[];
 };
 
-type Tab = "overview" | "products" | "orders" | "coupons" | "delivery" | "inventory" | "branches" | "team" | "audit" | "market";
+type Tab = "overview" | "products" | "orders" | "customers" | "coupons" | "delivery" | "inventory" | "branches" | "team" | "audit" | "market";
 
 const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "overview", label: "نظرة عامة", icon: LayoutDashboard },
   { key: "products", label: "المنتجات", icon: Package },
   { key: "orders", label: "الطلبات", icon: ShoppingBag },
+  { key: "customers", label: "الزبائن", icon: Users },
   { key: "coupons", label: "الكوبونات", icon: TicketPercent },
   { key: "delivery", label: "التوصيل", icon: Truck },
   { key: "inventory", label: "المخزون", icon: Boxes },
@@ -192,6 +193,7 @@ export default function AdminPage() {
                 {tab === "overview" && <Overview stats={stats} />}
                 {tab === "products" && <ProductsTab />}
                 {tab === "orders" && <OrdersTab />}
+                {tab === "customers" && <CustomersTab />}
                 {tab === "coupons" && <CouponsTab />}
                 {tab === "delivery" && <DeliveryTab />}
                 {tab === "inventory" && <InventoryTab stats={stats} onRefresh={() => fetch("/api/admin/stats").then((r) => r.json()).then(setStats)} />}
@@ -523,6 +525,10 @@ function OrdersTab() {
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
   const [filter, setFilter] = useState("all");
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [statusError, setStatusError] = useState<{ id: number; text: string } | null>(null);
+  const [returnFor, setReturnFor] = useState<number | null>(null);
+  const [returnQty, setReturnQty] = useState<Record<number, string>>({});
+  const [returnBusy, setReturnBusy] = useState(false);
 
   const load = useCallback((status: string) => {
     setOrders(null);
@@ -533,7 +539,46 @@ function OrdersTab() {
   useEffect(() => { load(filter); }, [filter, load]);
 
   const setStatus = async (id: number, status: string) => {
-    await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+    setStatusError(null);
+    const r = await fetch(`/api/orders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      setStatusError({ id, text: d.error ?? "تعذر تغيير الحالة" });
+      return;
+    }
+    load(filter);
+  };
+
+  const remainingOf = (it: OrderDTO["items"][number]) => it.qty - (it.returnedQty ?? 0);
+  const canReturn = (o: OrderDTO) =>
+    ["delivered", "return_requested"].includes(o.status) && o.items.some((it) => remainingOf(it) > 0);
+
+  const submitReturn = async (orderId: number) => {
+    const items = Object.entries(returnQty)
+      .map(([id, qty]) => ({ orderItemId: Number(id), qty: Number(qty) || 0 }))
+      .filter((i) => i.qty > 0);
+    if (!items.length) {
+      setStatusError({ id: orderId, text: "حدّد كمية لقطعة واحدة على الأقل" });
+      return;
+    }
+    setReturnBusy(true);
+    const r = await fetch(`/api/orders/${orderId}/returns`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setReturnBusy(false);
+    if (!r.ok) {
+      setStatusError({ id: orderId, text: d.error ?? "تعذر تسجيل الإرجاع" });
+      return;
+    }
+    setReturnFor(null);
+    setReturnQty({});
     load(filter);
   };
 
@@ -583,11 +628,87 @@ function OrdersTab() {
                   <div className="text-[11px] font-bold text-ink-soft">
                     {o.governorate && <span>{o.governorate}{o.district ? ` — ${o.district}` : ""} • </span>}
                     الدفع: {gatewayById(o.paymentMethod).name} {o.couponCode && `• كوبون ${o.couponCode}`}
+                    {o.refundTotal ? <span className="text-blush-600"> • مسترد {formatIQD(o.refundTotal)}</span> : null}
                   </div>
-                  <select value={o.status} onChange={(e) => setStatus(o.id, e.target.value)} className="field w-auto cursor-pointer py-2 text-[11px] font-black">
-                    {ORDER_STATUSES.map((s) => <option key={s} value={s}>{orderStatusLabel(s)}</option>)}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value=""
+                      disabled={!nextStatuses(o.status).length}
+                      onChange={(e) => { if (e.target.value) setStatus(o.id, e.target.value); }}
+                      className="field w-auto cursor-pointer py-2 text-[11px] font-black disabled:opacity-50"
+                    >
+                      <option value="">تغيير الحالة…</option>
+                      {nextStatuses(o.status).map((s) => <option key={s} value={s}>{orderStatusLabel(s)}</option>)}
+                    </select>
+                  </div>
                 </div>
+                {statusError?.id === o.id && (
+                  <p className="mt-2 text-[11px] font-black text-blush-600">{statusError.text}</p>
+                )}
+
+                {canReturn(o) && (
+                  <div className="mt-3 rounded-2xl bg-white p-3 ring-1 ring-ink/8">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="flex items-center gap-1.5 text-[11px] font-black"><RotateCcw size={12} /> إرجاع جزئي</p>
+                      <button
+                        onClick={() => { setReturnFor(returnFor === o.id ? null : o.id); setReturnQty({}); }}
+                        className="rounded-full bg-blush-50 px-3 py-1.5 text-[10px] font-black text-blush-600 hover:bg-blush-100"
+                      >
+                        {returnFor === o.id ? "إلغاء" : "تحديد القطع"}
+                      </button>
+                    </div>
+                    {returnFor === o.id && (
+                      <div className="mt-2 space-y-2">
+                        {o.items.map((it) => {
+                          const remaining = remainingOf(it);
+                          if (remaining <= 0) return null;
+                          return (
+                            <div key={it.id} className="flex items-center gap-2">
+                              <span className="flex-1 text-[11px] font-bold">
+                                {it.name} <span className="text-ink-faint">— متبقٍ {remaining}</span>
+                              </span>
+                              <input
+                                value={returnQty[it.id] ?? ""}
+                                onChange={(e) => {
+                                  const v = e.target.value.replace(/[^\d]/g, "");
+                                  setReturnQty((prev) => ({ ...prev, [it.id]: v }));
+                                }}
+                                placeholder="0"
+                                inputMode="numeric"
+                                className="field w-16 py-1.5 text-center text-[11px] font-black"
+                                dir="ltr"
+                              />
+                            </div>
+                          );
+                        })}
+                        <button
+                          onClick={() => submitReturn(o.id)}
+                          disabled={returnBusy}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-blush-500 py-2.5 text-[11px] font-black text-white disabled:opacity-60"
+                        >
+                          {returnBusy ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                          تسجيل الإرجاع واستعادة المخزون
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {o.events?.length ? (
+                  <div className="mt-3 space-y-1.5 border-t border-dashed border-ink/10 pt-3">
+                    <p className="text-[10px] font-black text-ink-soft">سجل الحالات</p>
+                    {o.events.map((e) => (
+                      <div key={e.id} className="flex flex-wrap items-center gap-2 text-[10px] font-bold text-ink-soft">
+                        <span className="size-1.5 rounded-full bg-lilac-400" />
+                        {e.fromStatus ? `${orderStatusLabel(e.fromStatus)} ← ` : ""}
+                        <span className="text-ink">{orderStatusLabel(e.toStatus)}</span>
+                        <span>• {fmtDateTime(e.createdAt)}</span>
+                        <span>• {e.actor}</span>
+                        {e.note ? <span className="text-ink-faint">• {e.note}</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -1079,6 +1200,89 @@ function AuditTab() {
         </div>
       </div>
       <p className="mt-3 text-[10px] font-bold text-ink-faint">السجل للقراءة فقط — يُكتب من الخادم ولا يمكن تعديله أو حذفه من الواجهة.</p>
+    </div>
+  );
+}
+
+
+/* ═══ الزبائن ═══ */
+
+type CustomerRow = {
+  id: number;
+  name: string;
+  phone: string;
+  createdAt: string;
+  ordersCount: number;
+  totalSpent: number;
+  lastOrderAt: string | null;
+};
+
+function CustomersTab() {
+  const [rows, setRows] = useState<CustomerRow[] | null>(null);
+  const [q, setQ] = useState("");
+
+  const load = useCallback((query: string) => {
+    setRows(null);
+    fetch(`/api/admin/customers${query ? `?q=${encodeURIComponent(query)}` : ""}`)
+      .then((r) => r.json())
+      .then((d) => setRows(d.customers ?? []))
+      .catch(() => setRows([]));
+  }, []);
+
+  useEffect(() => { load(""); }, [load]);
+
+  const totalSpent = (rows ?? []).reduce((s, c) => s + c.totalSpent, 0);
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-52">
+          <Search size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث بالاسم أو الهاتف..." className="field pr-10 py-2.5 text-sm" />
+        </div>
+        <button onClick={() => load(q.trim())} className="rounded-2xl bg-ink px-4 py-2.5 text-xs font-black text-white transition-transform hover:scale-105">بحث</button>
+      </div>
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <div className="card-bubble p-4">
+          <p className="text-[11px] font-black text-ink-soft">الزبائن المعروضون</p>
+          <p className="mt-1 text-lg font-black">{formatNum(rows?.length ?? 0)}</p>
+        </div>
+        <div className="card-bubble p-4">
+          <p className="text-[11px] font-black text-ink-soft">إنفاقهم الصافي</p>
+          <p className="mt-1 text-lg font-black text-blush-600">{formatIQD(totalSpent)}</p>
+        </div>
+        <div className="card-bubble p-4">
+          <p className="text-[11px] font-black text-ink-soft">بلا طلبات</p>
+          <p className="mt-1 text-lg font-black">{formatNum((rows ?? []).filter((c) => !c.ordersCount).length)}</p>
+        </div>
+      </div>
+
+      <div className="card-bubble overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[680px] text-right text-xs">
+            <thead>
+              <tr className="bg-paper text-[10px] font-black text-ink-soft">
+                <th className="p-3">الزبون</th><th className="p-3">الهاتف</th><th className="p-3">الطلبات</th>
+                <th className="p-3">الإنفاق</th><th className="p-3">آخر طلب</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows?.map((c) => (
+                <tr key={c.id} className="border-t border-black/5 font-bold hover:bg-blush-50/40">
+                  <td className="p-3 font-black">{c.name}</td>
+                  <td className="p-3 text-ink-soft" dir="ltr">{c.phone}</td>
+                  <td className="p-3">{formatNum(c.ordersCount)}</td>
+                  <td className={`p-3 font-black ${c.totalSpent ? "text-minty-600" : "text-ink-faint"}`}>{formatIQD(c.totalSpent)}</td>
+                  <td className="p-3 text-[10px] text-ink-faint">{c.lastOrderAt ? fmtDateTime(c.lastOrderAt) : "—"}</td>
+                </tr>
+              ))}
+              {rows === null && <tr><td colSpan={5} className="p-8 text-center"><Loader2 className="mx-auto animate-spin text-lilac-400" /></td></tr>}
+              {rows?.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-sm font-bold text-ink-faint">لا يوجد زبائن مطابقون</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { categories, orderItems, orders, products } from "@/db/schema";
+import { categories, orderEvents, orderItems, orderReturns, orderReturnItems, orders, products } from "@/db/schema";
 import { desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { baghdadDayKey, baghdadTodayKey } from "@/lib/format";
 import { gatewayById } from "@/lib/payments";
@@ -110,19 +110,37 @@ export async function GET(req: NextRequest) {
   });
 }
 
-/** lightweight — order rows for admin orders tab */
+/** lightweight — order rows for admin orders tab (with timeline + returned quantities) */
 export async function POST(req: NextRequest) {
   if (!isAdminAuthed(req)) return adminUnauthorized();
   const body = (await req.json().catch(() => ({}))) as { status?: string };
   const all = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(200);
   const filtered = body.status && body.status !== "all" ? all.filter((o) => o.status === body.status) : all;
   const ids = filtered.map((o) => o.id);
+
   const items = ids.length ? await db.select().from(orderItems).where(inArray(orderItems.orderId, ids)) : [];
+  const events = ids.length ? await db.select().from(orderEvents).where(inArray(orderEvents.orderId, ids)) : [];
+  const returns = ids.length ? await db.select().from(orderReturns).where(inArray(orderReturns.orderId, ids)) : [];
+  const returnIds = returns.map((r) => r.id);
+  const returnLines = returnIds.length
+    ? await db.select().from(orderReturnItems).where(inArray(orderReturnItems.returnId, returnIds))
+    : [];
+  const returnedByItem = new Map<number, number>();
+  for (const l of returnLines) returnedByItem.set(l.orderItemId, (returnedByItem.get(l.orderItemId) ?? 0) + l.qty);
+  const refundByOrder = new Map<number, number>();
+  for (const r of returns) refundByOrder.set(r.orderId, (refundByOrder.get(r.orderId) ?? 0) + r.amount);
+
   return Response.json({
     orders: filtered.slice(0, 100).map((o) => ({
       ...o,
       createdAt: o.createdAt.toISOString(),
-      items: items.filter((i) => i.orderId === o.id),
+      items: items
+        .filter((i) => i.orderId === o.id)
+        .map((i) => ({ ...i, returnedQty: returnedByItem.get(i.id) ?? 0 })),
+      events: events
+        .filter((e) => e.orderId === o.id)
+        .map((e) => ({ ...e, createdAt: e.createdAt.toISOString() })),
+      refundTotal: refundByOrder.get(o.id) ?? 0,
     })),
   });
 }

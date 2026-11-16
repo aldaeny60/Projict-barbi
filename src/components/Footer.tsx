@@ -79,13 +79,21 @@ export function Footer() {
             ))}
           </div>
           <p className="mt-4 text-[11px] leading-5 font-semibold text-white/50">
-            كل عمليات الدفع الإلكتروني مشفّرة عبر SSL وتُصدر فاتورة رقمية فورية ترصلك عبر SMS وواتساب.
+            الدفع عند الاستلام هو الخيار المتاح الآن ويُؤكَّد هاتفياً قبل الشحن. بوابات الدفع الإلكتروني معروضة للتحويل ويُنسّق فريقنا إتمامها معك — الربط المباشر قيد التفعيل.
           </p>
         </div>
       </div>
 
-      <div className="border-t border-white/10 py-5 text-center text-xs font-bold text-white/50">
-        باربي © {new Date().getFullYear()} — صُنع بحب في بغداد، بتوقيت بغداد (GMT+3)
+      <div className="border-t border-white/10 py-5">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-5 gap-y-2 px-6 text-xs font-bold text-white/60">
+          <Link href="/policies/returns" className="hover:text-butter-300">الاستبدال والإرجاع</Link>
+          <Link href="/policies/privacy" className="hover:text-butter-300">سياسة الخصوصية</Link>
+          <Link href="/policies/terms" className="hover:text-butter-300">شروط الاستخدام</Link>
+          <Link href="/track" className="hover:text-butter-300">تتبع طلب</Link>
+        </div>
+        <p className="mt-3 text-center text-xs font-bold text-white/40">
+          باربي © {new Date().getFullYear()} — صُنع بحب في بغداد، بتوقيت بغداد (GMT+3)
+        </p>
       </div>
     </footer>
   );

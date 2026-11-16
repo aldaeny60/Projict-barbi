@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { orderItems, orders } from "@/db/schema";
-import { desc, eq, inArray } from "drizzle-orm";
+import { orderEvents, orderItems, orders } from "@/db/schema";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { isValidIraqiPhone, maskPhone } from "@/lib/format";
 import { customerFromRequest } from "@/lib/session";
@@ -32,12 +32,19 @@ export async function GET(req: NextRequest) {
       .select()
       .from(orderItems)
       .where(inArray(orderItems.orderId, rows.map((r) => r.id)));
+    const events = await db
+      .select()
+      .from(orderEvents)
+      .where(inArray(orderEvents.orderId, rows.map((r) => r.id)));
     return Response.json({
       verified: true,
       orders: rows.map((r) => ({
         ...r,
         createdAt: r.createdAt.toISOString(),
         items: items.filter((i) => i.orderId === r.id),
+        events: events
+          .filter((e) => e.orderId === r.id)
+          .map((e) => ({ ...e, createdAt: e.createdAt.toISOString() })),
       })),
     });
   }
@@ -65,6 +72,11 @@ export async function GET(req: NextRequest) {
   }
 
   const items = await db.select().from(orderItems).where(eq(orderItems.orderId, row.id));
+  const history = await db
+    .select()
+    .from(orderEvents)
+    .where(eq(orderEvents.orderId, row.id))
+    .orderBy(asc(orderEvents.createdAt));
   return Response.json({
     verified: false,
     masked: true,
@@ -76,6 +88,7 @@ export async function GET(req: NextRequest) {
         governorate: row.governorate,
         phone: maskPhone(row.phone),
         itemsPreview: items.map((i) => ({ name: i.name, qty: i.qty })),
+        history: history.map((e) => ({ toStatus: e.toStatus, createdAt: e.createdAt.toISOString() })),
       },
     ],
   });

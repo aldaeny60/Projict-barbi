@@ -49,6 +49,25 @@ export const ORDER_STATUS_TONE: Record<string, string> = {
   returned: "bg-blush-100 text-blush-700",
 };
 
+/**
+ * الانتقالات المسموحة لحالة الطلب — يفرضها الخادم على الإدارة أيضاً.
+ * لا قفز من «قيد التأكيد» إلى «تم التسليم»، ولا عودة من حالة نهائية.
+ */
+export const ORDER_TRANSITIONS: Record<string, string[]> = {
+  pending: ["processing", "cancelled"],
+  processing: ["shipped", "cancelled"],
+  shipped: ["out_for_delivery", "delivered"],
+  out_for_delivery: ["delivered"],
+  delivered: ["return_requested", "returned"],
+  return_requested: ["returned", "delivered"],
+  cancelled: [],
+  returned: [],
+};
+
+export function nextStatuses(status: string): string[] {
+  return ORDER_TRANSITIONS[status] ?? [];
+}
+
 export const SIZE_CHART: { size: string; height: string; chest: string; waist: string; weight: string }[] = [
   { size: "0-6 شهور", height: "56 – 68", chest: "40 – 46", waist: "42 – 48", weight: "4 – 8" },
   { size: "6-12 شهر", height: "68 – 80", chest: "46 – 49", waist: "48 – 50", weight: "8 – 11" },

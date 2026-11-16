@@ -6,9 +6,17 @@ import { AnimatePresence, motion } from "framer-motion";
 import { LayoutGrid, Shirt, Sparkles, Baby, SlidersHorizontal, Flame, X, PackageSearch } from "lucide-react";
 import type { CategoryDTO, ProductDTO } from "@/lib/types";
 import { ProductCard } from "./ProductCard";
-import { SECTIONS } from "@/lib/data";
+import { COLOR_PALETTE, SECTIONS, SIZES_ALL } from "@/lib/data";
 
 type Section = "all" | "boys" | "girls" | "newborn";
+
+const PRICE_RANGES = [
+  { key: "", label: "كل الأسعار" },
+  { key: "0-15000", label: "أقل من 15 ألف" },
+  { key: "15000-30000", label: "15 – 30 ألف" },
+  { key: "30000-50000", label: "30 – 50 ألف" },
+  { key: "50000-0", label: "أكثر من 50 ألف" },
+];
 
 const SORTS = [
   { key: "newest", label: "الأحدث" },
@@ -36,6 +44,14 @@ export function ShopClient() {
   const sort = sp.get("sort") ?? "newest";
   const deals = sp.get("deals") === "1";
   const isNew = sp.get("new") === "1";
+  const minPrice = sp.get("minPrice") ?? "";
+  const maxPrice = sp.get("maxPrice") ?? "";
+  const size = sp.get("size") ?? "";
+  const color = sp.get("color") ?? "";
+  const [showFilters, setShowFilters] = useState(false);
+
+  const priceKey = minPrice || maxPrice ? `${minPrice}-${maxPrice}` : "";
+  const filtersCount = [priceKey, size, color].filter(Boolean).length;
 
   const [cats, setCats] = useState<CategoryDTO[]>([]);
   const [items, setItems] = useState<ProductDTO[] | null>(null);
@@ -53,12 +69,16 @@ export function ShopClient() {
     if (sort) params.set("sort", sort);
     if (deals) params.set("deals", "1");
     if (isNew) params.set("new", "1");
+    if (minPrice) params.set("minPrice", minPrice);
+    if (maxPrice) params.set("maxPrice", maxPrice);
+    if (size) params.set("size", size);
+    if (color) params.set("color", color);
     params.set("limit", "60");
     fetch(`/api/products?${params}`)
       .then((r) => r.json())
       .then((d) => setItems(d.products ?? []))
       .catch(() => setItems([]));
-  }, [section, category, q, sort, deals, isNew]);
+  }, [section, category, q, sort, deals, isNew, minPrice, maxPrice, size, color]);
 
   const setParams = useCallback(
     (patch: Record<string, string | null>) => {
@@ -164,6 +184,72 @@ export function ShopClient() {
             ))}
           </select>
         </div>
+      </div>
+
+      {/* filters */}
+      <div className="mb-6">
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-xs font-black transition-colors ${filtersCount ? "bg-ink text-white" : "bg-white text-ink-soft shadow-soft hover:text-ink"}`}
+        >
+          <SlidersHorizontal size={14} />
+          فلاتر {filtersCount ? `(${filtersCount})` : ""}
+          {filtersCount ? (
+            <span
+              onClick={(e) => { e.stopPropagation(); setParams({ minPrice: null, maxPrice: null, size: null, color: null }); }}
+              className="mr-1 rounded-full bg-white/20 px-2 py-0.5 text-[10px]"
+            >
+              مسح
+            </span>
+          ) : null}
+        </button>
+
+        {showFilters && (
+          <div className="mt-2 grid gap-4 rounded-3xl bg-white p-4 shadow-soft md:grid-cols-3">
+            <div>
+              <p className="mb-2 text-xs font-black text-ink-soft">السعر</p>
+              <select
+                value={priceKey}
+                onChange={(e) => {
+                  const [min, max] = e.target.value.split("-");
+                  setParams({ minPrice: min && min !== "0" ? min : null, maxPrice: max && max !== "0" ? max : null });
+                }}
+                className="field cursor-pointer py-2 text-xs font-black"
+              >
+                {PRICE_RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-black text-ink-soft">المقاس</p>
+              <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
+                {SIZES_ALL.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setParams({ size: size === s ? null : s })}
+                    className={`rounded-xl px-2.5 py-1.5 text-[10px] font-black ${size === s ? "bg-ink text-white" : "bg-paper ring-1 ring-ink/10"}`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-black text-ink-soft">اللون</p>
+              <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
+                {COLOR_PALETTE.map((c) => (
+                  <button
+                    key={c.hex}
+                    onClick={() => setParams({ color: color === c.name ? null : c.name })}
+                    className={`flex items-center gap-1 rounded-xl py-1.5 pl-2.5 pr-1.5 text-[10px] font-black ${color === c.name ? "bg-ink text-white" : "bg-paper ring-1 ring-ink/10"}`}
+                  >
+                    <span className="size-3.5 rounded-full ring-1 ring-black/20" style={{ background: c.hex }} />
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* grid */}

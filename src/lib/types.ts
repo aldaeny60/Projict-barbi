@@ -50,6 +50,18 @@ export type OrderItemDTO = {
   qty: number;
   size: string | null;
   color: string | null;
+  /** الكمية المسترجعة من هذا السطر (مرتجعات جزئية) */
+  returnedQty?: number;
+};
+
+export type OrderEventDTO = {
+  id: number;
+  fromStatus: string | null;
+  toStatus: string;
+  actor: string;
+  role: string;
+  note: string | null;
+  createdAt: string;
 };
 
 export type OrderDTO = {
@@ -74,6 +86,8 @@ export type OrderDTO = {
   staffName: string | null;
   createdAt: string;
   items: OrderItemDTO[];
+  events?: OrderEventDTO[];
+  refundTotal?: number;
 };
 
 export type CouponDTO = {

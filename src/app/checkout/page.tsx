@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -12,7 +12,16 @@ import { useCart, useCustomer, useToast } from "@/components/providers";
 import { formatIQD, fmtDateTime, isValidIraqiPhone } from "@/lib/format";
 import { GOVERNORATES } from "@/lib/data";
 import { PAYMENT_GATEWAYS } from "@/lib/payments";
+import { newRequestId } from "@/lib/request-id";
 import type { DeliveryFeeDTO } from "@/lib/types";
+
+type SavedAddress = {
+  id: number;
+  governorate: string;
+  district: string | null;
+  detail: string;
+  createdAt: string;
+};
 
 type Invoice = {
   code: string;
@@ -48,6 +57,30 @@ export default function CheckoutPage() {
   const [placing, setPlacing] = useState(false);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [smsState, setSmsState] = useState<string>("skipped");
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const requestIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!requestIdRef.current) requestIdRef.current = newRequestId();
+  }, []);
+
+  /* عناوين الزبونة المحفوظة على حسابها + تعبئة الاسم والرقم */
+  useEffect(() => {
+    if (!customer) { setSavedAddresses([]); return; }
+    setName((prev) => prev || customer.name);
+    setPhone((prev) => prev || customer.phone);
+    fetch("/api/customer/addresses")
+      .then((r) => r.json())
+      .then((d) => setSavedAddresses(d.addresses ?? []))
+      .catch(() => {});
+  }, [customer]);
+
+  const applySaved = (a: SavedAddress) => {
+    setGov(a.governorate);
+    setDistrict(a.district ?? "");
+    setAddress(a.detail);
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -83,6 +116,8 @@ export default function CheckoutPage() {
     }
     setPlacing(true);
     try {
+      const requestId = requestIdRef.current ?? newRequestId();
+      requestIdRef.current = requestId;
       const r = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -95,12 +130,16 @@ export default function CheckoutPage() {
           notes: notes.trim() || undefined,
           paymentMethod: method,
           couponCode: couponCode || undefined,
+          requestId,
           items: lines.map((l) => ({ productId: l.productId, qty: l.qty, size: l.size, color: l.color })),
         }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? "تعذر إنشاء الطلب");
       setInvoice(d.invoice);
+      setSmsState(d.notifications?.sms ?? "skipped");
+      // مفتاح جديد للطلب القادم — إعادة إرسال هذا الطلب لن تُنشئ نسخة ثانية
+      requestIdRef.current = newRequestId();
       clear();
       localStorage.removeItem("sighar_pref_v1");
     } catch (e) {
@@ -136,8 +175,11 @@ export default function CheckoutPage() {
             <p className="mt-1 text-sm font-bold text-ink-soft">
               رقم الفاتورة: <span className="font-black text-ink" dir="ltr">{invoice.code}</span>
             </p>
-            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/80 px-4 py-1.5 text-[11px] font-black text-minty-700">
-              <MessageCircle size={12} /> تم إرسال نسخة بالفاتورة SMS وواتساب إلى {invoice.phone}
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/80 px-4 py-1.5 text-center text-[11px] font-black text-minty-700">
+              <MessageCircle size={12} />
+              {smsState === "sent"
+                ? <>تم إرسال نسخة الفاتورة SMS إلى {invoice.phone}</>
+                : <>احتفظي برقم الفاتورة — شاركيها عبر واتساب وسنتصل بك للتأكيد</>}
             </p>
           </div>
 
@@ -227,6 +269,20 @@ export default function CheckoutPage() {
           {/* address */}
           <div className="card-bubble p-5">
             <h3 className="mb-4 flex items-center gap-2 text-lg font-black"><MapPin size={18} className="text-aqua-500" /> عنوان التوصيل</h3>
+            {savedAddresses.length > 0 && (
+              <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-black text-ink-faint">عناويني المحفوظة:</span>
+                {savedAddresses.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => applySaved(a)}
+                    className="rounded-full bg-aqua-100 px-3 py-1.5 text-[10px] font-black text-aqua-700 transition-colors hover:bg-aqua-200"
+                  >
+                    {a.governorate}{a.district ? ` — ${a.district}` : ""}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <select value={gov} onChange={(e) => { setGov(e.target.value); setDistrict(""); }} className="field cursor-pointer font-black">
                 <option value="">المحافظة…</option>
@@ -251,7 +307,9 @@ export default function CheckoutPage() {
           {/* payment */}
           <div className="card-bubble p-5">
             <h3 className="mb-1 flex items-center gap-2 text-lg font-black"><ShieldCheck size={18} className="text-minty-500" /> طريقة الدفع</h3>
-            <p className="mb-4 text-xs font-bold text-ink-faint">كل البوابات مشفّرة SSL — وتُصدر فاتورة رقمية فورية</p>
+            <p className="mb-4 text-xs font-bold text-ink-faint">
+              الدفع عند الاستلام يُؤكَّد هاتفياً. البوابات الإلكترونية معروضة للتحويل — يُنسّق فريق باربي إتمامها معك، والربط المباشر قيد التفعيل.
+            </p>
             <div className="grid gap-2.5 sm:grid-cols-2">
               {PAYMENT_GATEWAYS.map((g) => {
                 const active = method === g.id;

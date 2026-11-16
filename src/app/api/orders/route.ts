@@ -1,18 +1,56 @@
 import { db } from "@/db";
-import { coupons, orderItems, orders, products } from "@/db/schema";
+import { coupons, orderEvents, orderItems, orderReturns, orders, products } from "@/db/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { isValidIraqiPhone } from "@/lib/format";
-import { computeDeliveryFee, getCouponDiscount, nextOrderCode } from "@/lib/order-utils";
+import { cleanRequestKey, computeDeliveryFee, getCouponDiscount, nextOrderCode } from "@/lib/order-utils";
 import { checkRateLimit, clientKey, rateLimited } from "@/lib/rate-limit";
 import { customerFromRequest, isSameOrigin } from "@/lib/session";
 import { sendOrderNotifications } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
+type OrderRow = typeof orders.$inferSelect;
+
+/** رد موحّد لطلب مكرر — نعيد نفس الفاتورة بدل إنشاء طلب ثانٍ */
+async function duplicateResponse(order: OrderRow) {
+  const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
+  return Response.json({
+    ok: true,
+    duplicate: true,
+    payment:
+      order.paymentMethod === "cod"
+        ? { mode: "cod" as const, note: "الدفع نقداً عند الاستلام بعد تأكيد الطلب هاتفياً" }
+        : { mode: "gateway_pending" as const, note: "سيتواصل فريق باربي لإتمام الدفع الإلكتروني" },
+    order: { id: order.id, code: order.code, createdAt: order.createdAt.toISOString(), status: order.status },
+    invoice: {
+      code: order.code,
+      customerName: order.customerName,
+      phone: order.phone,
+      governorate: order.governorate,
+      address: order.address,
+      items,
+      subtotal: order.subtotal,
+      discount: order.discountTotal,
+      deliveryFee: order.deliveryFee,
+      total: order.total,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt.toISOString(),
+    },
+    notifications: {
+      sms: "skipped" as const,
+      whatsapp: "link" as const,
+      message: "هذا الطلب مسجّل مسبقاً — لم نُنشئ طلباً جديداً",
+      reason: "duplicate-request",
+    },
+  });
+}
+
 /**
  * POST body: { customerName, phone, governorate, district, address, notes,
- *               paymentMethod, couponCode, items: [{productId, qty, size, color}] }
+ *               paymentMethod, couponCode, requestId?, items: [{productId, qty, size, color}] }
+ *
+ * requestId (idempotency): نفس المفتاح مرتين لا يُنشئ طلبين ولا يخصم المخزون مرتين.
  */
 export async function POST(req: NextRequest) {
   const rl = checkRateLimit(clientKey(req, "orders"), 10, 60_000);
@@ -30,6 +68,7 @@ export async function POST(req: NextRequest) {
       paymentMethod?: string;
       couponCode?: string;
     };
+    const requestKey = cleanRequestKey(body.requestId);
     const rawItems = (body.items ?? []) as { productId: number; qty: number; size?: string; color?: string }[];
 
     if (!customerName?.trim()) return Response.json({ error: "الاسم مطلوب" }, { status: 400 });
@@ -38,6 +77,12 @@ export async function POST(req: NextRequest) {
     if (!governorate) return Response.json({ error: "اختر المحافظة" }, { status: 400 });
     if (!address?.trim()) return Response.json({ error: "اكتب العنوان التفصيلي أو أقرب نقطة دالة" }, { status: 400 });
     if (!rawItems.length) return Response.json({ error: "السلة فارغة" }, { status: 400 });
+
+    // إعادة الإرسال: نُعيد الطلب الموجود بنفس الفاتورة
+    if (requestKey) {
+      const [existing] = await db.select().from(orders).where(eq(orders.requestKey, requestKey)).limit(1);
+      if (existing) return duplicateResponse(existing);
+    }
 
     const ids = [...new Set(rawItems.map((i) => Number(i.productId)).filter(Boolean))];
     const rows = await db.select().from(products).where(inArray(products.id, ids));
@@ -67,6 +112,8 @@ export async function POST(req: NextRequest) {
     const deliveryFee = await computeDeliveryFee(governorate);
     const total = subtotal - discount + deliveryFee;
     const code = await nextOrderCode("SG");
+    const session = customerFromRequest(req);
+    const actor = session?.phone ?? phone.trim();
 
     // معاملة ذرّية: الطلب + القطع + خصم المخزون بشرط توفره — لا مخزون سالب ولا ازدواج
     let order: typeof orders.$inferSelect;
@@ -99,9 +146,17 @@ export async function POST(req: NextRequest) {
             couponCode: discount > 0 ? (coupon.coupon?.code ?? null) : null,
             deliveryFee,
             total,
+            requestKey,
           })
           .returning();
         await tx.insert(orderItems).values(lines.map((l) => ({ ...l, orderId: ord.id })));
+        await tx.insert(orderEvents).values({
+          orderId: ord.id,
+          fromStatus: null,
+          toStatus: "pending",
+          actor,
+          role: "customer",
+        });
         // استهلاك الكوبون داخل نفس المعاملة — لا يتجاوز حد الاستخدام
         if (discount > 0 && coupon.coupon) {
           await tx
@@ -118,12 +173,18 @@ export async function POST(req: NextRequest) {
           { status: 409 }
         );
       }
+      // سباق إعادة الإرسال: وصل نفس المفتاح مرتين بالتوازي
+      if (requestKey && (e as { code?: string }).code === "23505") {
+        const [existing] = await db.select().from(orders).where(eq(orders.requestKey, requestKey)).limit(1);
+        if (existing) return duplicateResponse(existing);
+      }
       throw e;
     }
 
-    const paymentStatus = (paymentMethod ?? "cod") === "cod"
-      ? { mode: "cod" as const, note: "الدفع نقداً عند الاستلام بعد تأكيد الطلب هاتفياً" }
-      : { mode: "gateway_pending" as const, note: "سيتواصل فريق باربي لإتمام الدفع الإلكتروني — الربط المباشر بالبوابة يتطلب اعتمادات الإنتاج" };
+    const paymentStatus =
+      (paymentMethod ?? "cod") === "cod"
+        ? { mode: "cod" as const, note: "الدفع نقداً عند الاستلام بعد تأكيد الطلب هاتفياً" }
+        : { mode: "gateway_pending" as const, note: "سيتواصل فريق باربي لإتمام الدفع الإلكتروني — الربط المباشر بالبوابة يتطلب اعتمادات الإنتاج" };
 
     // إشعارات حقيقية: تُرسل فعلاً وتُبلَّغ نتيجتها، ولا ندّعي إرسالاً لم يحدث
     const notifications = await sendOrderNotifications({
@@ -160,8 +221,8 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * GET → طلبات الزبون الحالي من جلسة OTP الموقّعة.
- * لا يُقبل رقم هاتف في الرابط: من يعرف رقماً لا يحق له رؤية عنوان واسم وطلبات صاحبه.
+ * GET → طلبات الزبون الحالي من جلسة OTP الموقّعة، مع خط زمني لكل طلب
+ * وإجمالي المسترد من المرتجعات.
  */
 export async function GET(req: NextRequest) {
   const session = customerFromRequest(req);
@@ -190,11 +251,19 @@ export async function GET(req: NextRequest) {
     list.push(it);
     byOrder.set(it.orderId, list);
   }
+  const events = await db.select().from(orderEvents).where(inArray(orderEvents.orderId, ids));
+  const refunds = new Map<number, number>();
+  for (const r of await db.select().from(orderReturns).where(inArray(orderReturns.orderId, ids))) {
+    refunds.set(r.orderId, (refunds.get(r.orderId) ?? 0) + r.amount);
+  }
+
   return Response.json({
     orders: rows.map((r) => ({
       ...r,
       createdAt: r.createdAt.toISOString(),
       items: byOrder.get(r.id) ?? [],
+      events: events.filter((e) => e.orderId === r.id).map((e) => ({ ...e, createdAt: e.createdAt.toISOString() })),
+      refundTotal: refunds.get(r.id) ?? 0,
     })),
   });
 }

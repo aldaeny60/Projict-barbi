@@ -13,6 +13,7 @@ import type { BranchDTO, CategoryDTO, ProductDTO, ShiftDTO } from "@/lib/types";
 import { PAYMENT_GATEWAYS } from "@/lib/payments";
 import { COLOR_PALETTE, SIZES_ALL, SECTIONS } from "@/lib/data";
 import { formatIQD, fmtTime, fmtDateTime, baghdadTodayKey } from "@/lib/format";
+import { newRequestId } from "@/lib/request-id";
 
 type PosLine = {
   productId: number;
@@ -192,12 +193,17 @@ export default function PosPage() {
   };
 
   /* complete sale */
+  const requestKeyRef = useRef<string | null>(null);
   const completeSale = async () => {
     if (!lines.length) return;
+    // مفتاح ثابت لكل محاولة: إعادة الإرسال أو فقدان الرد لا تُنشئ فاتورة ثانية
+    const requestId = requestKeyRef.current ?? newRequestId();
+    requestKeyRef.current = requestId;
     const payload = {
       branchId,
       shiftId: shift?.id ?? null,
       staffName: shift?.staffName ?? "كاشير",
+      requestId,
       items: lines.map((l) => ({ productId: l.productId, qty: l.qty, size: l.size, color: l.color })),
       discount: discount ?? undefined,
       couponCode: couponDisc > 0 ? couponCode : undefined,
@@ -230,6 +236,7 @@ export default function PosPage() {
   const resetInvoice = () => {
     setLines([]); setDiscount(null); setCouponCode(""); setCouponDisc(0); setPayments([]); setCustomerPhone("");
     setShowPay(false);
+    requestKeyRef.current = null;
   };
 
   /* sync queue */
