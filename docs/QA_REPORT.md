@@ -47,3 +47,5 @@
 - #30 إنشاء حساب موظف (scrypt) → رمز خاطئ 401 → رمز صحيح يفتح وردية بدور الحساب، والفتح بالاسم وحده لفرع له حسابات 403.
 - #31 `/api/uploads` بلا جلسة إدارة 401.
 - #32 سجل التدقيق يحتوي `admin.login` و`order.status` و`pos.sale` و`staff.create`، ولا يُقرأ بلا إدارة (401).
+
+- الحالة: **32/32 PASS** عبر GitHub Actions (`build-and-test`): `tsc --noEmit` = 0 أخطاء، `drizzle-kit push`، `next build`، بذر عبر API، ثم الاختبارات — آخر تشغيل على commit `9bc2450`: ناجح في 1m 23s.

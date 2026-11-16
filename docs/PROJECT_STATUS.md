@@ -24,3 +24,7 @@
 - مزود SMS عراقي (بدونه لا OTP في الإنتاج، والخادم يرفض بدل تسريب الرمز).
 - ضبط `UPSTASH_REDIS_REST_URL/TOKEN` إذا شُغّل أكثر من نسخة.
 - نسخ احتياطي دوري `pg_dump` + مراقبة (Sentry/uptime) + WAF أمامي.
+
+## التحقق
+`scripts/api-tests.mjs`: 32 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `9bc2450` (job 133615109357).
+
