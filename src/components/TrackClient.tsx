@@ -63,17 +63,7 @@ export function TrackClient() {
     : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-3 py-8 md:px-6">
-      <div className="card-bubble overflow-hidden bg-gradient-to-l from-aqua-100 via-blush-50 to-lilac-100 p-6 text-center">
-        <span className="mx-auto grid size-16 animate-floaty place-items-center rounded-3xl bg-white shadow-soft">
-          <Package className="text-lilac-500" size={27} />
-        </span>
-        <h1 className="mt-3 text-xl font-black">وين وصل طلبي؟</h1>
-        <p className="mt-1 text-xs font-bold text-ink-soft">
-          أدخلي رقم الهاتف اللي طلبتي بيه — يطلعلك كل طلباتج وحالتها لحظة بلحظة.
-        </p>
-      </div>
-
+    <>
       <div className="card-bubble mt-4 p-5">
         <div className="relative">
           <Phone size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-blush-400" />
@@ -152,7 +142,7 @@ export function TrackClient() {
           </p>
         )}
       </div>
-    </div>
+    </>
   );
 }
 
