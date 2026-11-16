@@ -119,7 +119,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!adminAuthed(req)) return adminUnauthorized();
+  if (!isAdminAuthed(req)) return adminUnauthorized();
   if (!isSameOrigin(req)) return Response.json({ error: "طلب غير موثوق" }, { status: 403 });
   const id = Number(req.nextUrl.searchParams.get("id"));
   if (!id) return Response.json({ error: "معرّف مطلوب" }, { status: 400 });
