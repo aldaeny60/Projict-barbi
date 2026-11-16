@@ -49,3 +49,16 @@
 - #32 سجل التدقيق يحتوي `admin.login` و`order.status` و`pos.sale` و`staff.create`، ولا يُقرأ بلا إدارة (401).
 
 - الحالة: **32/32 PASS** عبر GitHub Actions (`build-and-test`): `tsc --noEmit` = 0 أخطاء، `drizzle-kit push`، `next build`، بذر عبر API، ثم الاختبارات — آخر تشغيل على commit `9bc2450`: ناجح في 1m 23s.
+
+
+## سير عمل سلامة الطلب والمخزون (33–42)
+- **idempotency الطلب**: نفس `requestId` مرتين → طلب واحد، والثاني `duplicate:true`، والمخزون ينقص مرة واحدة.
+- **قواعد الانتقال**: `pending→delivered` مرفوض 409، والمسار `processing→shipped→out_for_delivery→delivered` يمر، والعودة `delivered→processing` مرفوضة 409.
+- **سجل الحالات**: إنشاء الطلب + كل انتقال يُسجَّل في `order_events` (حدث الإنشاء `fromStatus=null`).
+- **إرجاع جزئي**: إرجاع 1 من 2 → `fullyReturned:false` واسترداد = سعر القطعة والمخزون +1؛ كمية أكبر من المتبقي 409؛ إكمال الباقي → الحالة `returned` والمخزون يعود كاملاً.
+- **الزبائن**: `/api/admin/customers` يعيد عدد الطلبات والإنفاق الصافي وآخر طلب، و401 بلا جلسة إدارة.
+- **فلاتر المتجر**: `minPrice/maxPrice` و`size` و`color` لا تُسرّب نتائج خارج الشرط.
+- **السياسات**: `/policies/returns` `/privacy` `/terms` = 200 ورابط الخصوصية في الفوتر.
+- **idempotency الكاشير**: نفس `requestId` → فاتورة واحدة (`duplicate:true`) ومخزون ناقص مرة واحدة.
+
+- **الحالة النهائية: 42/42 PASS** عبر GitHub Actions على commit `9eaddbc` (`build-and-test` ناجح في 1m 10s): `tsc --noEmit` = 0 أخطاء، `drizzle-kit push`، `next build`، بذر، ثم كل الاختبارات.

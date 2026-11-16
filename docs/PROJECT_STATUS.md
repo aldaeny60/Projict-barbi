@@ -31,5 +31,5 @@
 - نسخ احتياطي دوري `pg_dump` + مراقبة (Sentry/uptime) + WAF أمامي.
 
 ## التحقق
-`scripts/api-tests.mjs`: 32 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `9bc2450` (job 133615109357).
+`scripts/api-tests.mjs`: 42 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `9eaddbc` (job 133624415897).
 
