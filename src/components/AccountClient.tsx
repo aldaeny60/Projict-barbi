@@ -8,7 +8,7 @@ import {
   User, Package, Heart, TicketPercent, MapPin, LogOut, Phone, ShieldCheck,
   Loader2, Copy, Check, Truck, Star,
 } from "lucide-react";
-import { useCustomer, useFavorites, useToast } from "./providers";
+import { useCart, useCustomer, useFavorites, useToast } from "./providers";
 import { formatIQD, fmtDateTime, isValidIraqiPhone, maskPhone } from "@/lib/format";
 import { GOVERNORATES, ORDER_STATUS_META, ORDER_STATUS_TONE } from "@/lib/data";
 import { ProductCard } from "./ProductCard";
@@ -226,7 +226,51 @@ export function AccountClient() {
 
 function OrdersTab({ orders, reload }: { orders: OrderDTO[] | null; reload: () => void }) {
   const { toast } = useToast();
+  const { add } = useCart();
   const [cancelId, setCancelId] = useState<number | null>(null);
+  const [reordering, setReordering] = useState<number | null>(null);
+
+  /** إعادة الطلب: نضيف المتوفر فقط بالأسعار والمخزون الحاليين */
+  const reorder = async (o: OrderDTO) => {
+    setReordering(o.id);
+    let added = 0;
+    let skipped = 0;
+    for (const it of o.items) {
+      if (!it.productId) { skipped++; continue; }
+      try {
+        const r = await fetch(`/api/products/${it.productId}`);
+        if (!r.ok) { skipped++; continue; }
+        const { product } = (await r.json()) as { product: ProductDTO };
+        const size = it.size && product.sizes.includes(it.size) ? it.size : product.sizes[0];
+        const left = product.sizeStock?.find((s) => s.size === size)?.stock ?? product.stock;
+        if (!size || left <= 0) { skipped++; continue; }
+        add(
+          {
+            productId: product.id,
+            slug: product.slug,
+            name: product.name,
+            price: product.price,
+            compareAtPrice: product.compareAtPrice,
+            image: product.images[0] ?? "",
+            size,
+            color: it.color ?? product.colors[0]?.name ?? "",
+            stock: left,
+          },
+          Math.min(it.qty, left, 10)
+        );
+        added++;
+      } catch {
+        skipped++;
+      }
+    }
+    setReordering(null);
+    if (added) {
+      toast(skipped ? `أضفنا ${added} قطعة — ${skipped} غير متوفرة حالياً` : `أضفنا ${added} قطعة للسلة`);
+      window.location.href = "/cart";
+    } else {
+      toast("ما بقى شي من هذا الطلب متوفر حالياً", "err");
+    }
+  };
 
   const requestReturn = async (id: number) => {
     const r = await fetch(`/api/orders/${id}`, {
@@ -331,6 +375,15 @@ function OrdersTab({ orders, reload }: { orders: OrderDTO[] | null; reload: () =
                 {o.status === "delivered" && (
                   <button onClick={() => requestReturn(o.id)} className="rounded-full bg-butter-100 px-3 py-1.5 text-[11px] font-black text-butter-700 hover:bg-butter-200">
                     طلب إرجاع
+                  </button>
+                )}
+                {!["cancelled", "returned"].includes(o.status) && (
+                  <button
+                    onClick={() => reorder(o)}
+                    disabled={reordering === o.id}
+                    className="rounded-full bg-aqua-100 px-3 py-1.5 text-[11px] font-black text-aqua-700 hover:bg-aqua-200 disabled:opacity-60"
+                  >
+                    {reordering === o.id ? "جاري الإضافة…" : "إعادة الطلب"}
                   </button>
                 )}
                 {o.status === "pending" && (
