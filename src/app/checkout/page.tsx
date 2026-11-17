@@ -177,7 +177,7 @@ export default function CheckoutPage() {
           const pr = await fetch("/api/payments/init", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orderId: d.order.id, provider: method }),
+            body: JSON.stringify({ orderId: d.order.id, provider: method, phone: phone.trim(), code: d.order.code }),
           });
           const pd = await pr.json().catch(() => ({}));
           if (pr.ok && pd.redirectUrl) {

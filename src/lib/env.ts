@@ -93,8 +93,9 @@ export const env = {
     /**
      * مزوّد وهمي للاختبارات فقط: يُفعّل صراحةً بـ PAYMENT_SANDBOX=1.
      * لا يحصّل أي مال — يحاكي نجاح الدفع لاختبار المسار كاملاً.
+     * ممنوع في الإنتاج: بدونه لا يمكن «دفع» طلب بلا مال (assertRuntimeConfig يرفض).
      */
-    sandbox: process.env.PAYMENT_SANDBOX === "1",
+    sandbox: !isProd && process.env.PAYMENT_SANDBOX === "1",
   },
 
   /** أجرة توصيل افتراضية لمحافظة غير مسجّلة في جدول الرسوم */
@@ -138,6 +139,10 @@ export function assertRuntimeConfig(): void {
   else if (read("ADMIN_PIN") === "2024") problems.push("ADMIN_PIN ما زال 2024 — غيّره قبل التشغيل");
   for (const kind of ["admin", "customer", "staff"] as SessionKind[]) {
     if (!read(SECRET_ENV[kind])) problems.push(`${SECRET_ENV[kind]} غير مضبوط`);
+  }
+  // مزوّد الاختبار يحوّل أي طلب إلى «مدفوع» بلا مال — ممنوع في الإنتاج
+  if (process.env.PAYMENT_SANDBOX === "1") {
+    problems.push("PAYMENT_SANDBOX=1 ممنوع في الإنتاج — يسمح بطلبات «مدفوعة» بلا مال");
   }
 
   if (problems.length) {

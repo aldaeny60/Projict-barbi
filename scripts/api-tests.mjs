@@ -1240,6 +1240,88 @@ async function run() {
     return "لصاحبه فقط + 404 لغير الموجود ✓";
   });
 
+  // 62) لا بدء دفع لطلب ليس لك
+  await test("حماية بدء الدفع (ملكية الطلب)", async () => {
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const p = all.products.find((x) => (x.sizeStock ?? []).some((s) => s.stock >= 1));
+    assert(p, "no stock");
+    const sz = (p.sizeStock ?? []).find((s) => s.stock >= 1).size;
+    const created = await fetch(`${BASE}/api/orders`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        customerName: "QA pay", phone: QA_PHONE, governorate: "بغداد", address: "QA pay",
+        paymentMethod: "zaincash",
+        items: [{ productId: p.id, qty: 1, size: sz, color: p.colors[0]?.name }],
+      }),
+    }).then(j);
+    assert(created.ok, JSON.stringify(created));
+
+    const anon = await fetch(`${BASE}/api/payments/init`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ orderId: created.order.id, provider: "sandbox" }),
+    });
+    assert(anon.status === 401, `anon init got ${anon.status}`);
+
+    const wrongPhone = await fetch(`${BASE}/api/payments/init`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ orderId: created.order.id, provider: "sandbox", phone: QA_PHONE2 }),
+    });
+    assert(wrongPhone.status === 401, `wrong phone got ${wrongPhone.status}`);
+
+    const rightPhone = await fetch(`${BASE}/api/payments/init`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ orderId: created.order.id, provider: "sandbox", phone: QA_PHONE }),
+    }).then(j);
+    assert(rightPhone.ok && rightPhone.redirectUrl, JSON.stringify(rightPhone));
+    return "بلا هاتف/بهاتف خاطئ 401 ✓";
+  });
+
+  // 63) مسار دفع كامل عبر مزوّد الاختبار: init → callback → الطلب مدفوع
+  await test("مسار الدفع الكامل (مزوّد اختبار)", async () => {
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const p = all.products.find((x) => (x.sizeStock ?? []).some((s) => s.stock >= 1));
+    const sz = (p.sizeStock ?? []).find((s) => s.stock >= 1).size;
+    const created = await fetch(`${BASE}/api/orders`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        customerName: "QA fullpay", phone: QA_PHONE, governorate: "بغداد", address: "QA fullpay",
+        paymentMethod: "zaincash",
+        items: [{ productId: p.id, qty: 1, size: sz, color: p.colors[0]?.name }],
+      }),
+    }).then(j);
+    assert(created.ok, JSON.stringify(created));
+
+    const init = await fetch(`${BASE}/api/payments/init`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ orderId: created.order.id, provider: "sandbox", phone: QA_PHONE }),
+    }).then(j);
+    assert(init.ok && init.redirectUrl, JSON.stringify(init));
+
+    const cb = await fetch(init.redirectUrl, { redirect: "manual" });
+    assert(cb.status === 303 || cb.status === 307, `callback status ${cb.status}`);
+    const location = cb.headers.get("location") ?? "";
+    assert(location.includes("status=paid"), `callback location ${location}`);
+
+    const after = await fetch(`${BASE}/api/admin/stats`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ status: "all", q: created.order.code }),
+    }).then(j);
+    const row = after.orders?.find((o) => o.code === created.order.code);
+    assert(row?.paymentStatus === "paid", `paymentStatus ${row?.paymentStatus}`);
+
+    // إعادة إرسال نفس الإشعار لا تغيّر شيئاً (idempotent)
+    const again = await fetch(init.redirectUrl, { redirect: "manual" });
+    assert(again.status === 303 || again.status === 307, "repeat callback failed");
+    return `${created.order.code} → مدفوع ✓`;
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

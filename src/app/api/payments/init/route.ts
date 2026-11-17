@@ -23,7 +23,12 @@ export async function POST(req: NextRequest) {
   const rl = checkRateLimit(clientKey(req, "payment-init"), 20, 60_000);
   if (!rl.allowed) return rateLimited(rl.retryAfterSec);
 
-  const body = (await req.json().catch(() => ({}))) as { orderId?: number; provider?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    orderId?: number;
+    provider?: string;
+    phone?: string;
+    code?: string;
+  };
   const orderId = Number(body.orderId);
   const provider = String(body.provider ?? "") as ProviderId;
   if (!orderId) return Response.json({ error: "معرّف الطلب مطلوب" }, { status: 400 });
@@ -49,9 +54,16 @@ export async function POST(req: NextRequest) {
   if (order.paymentStatus === "paid") {
     return Response.json({ error: "هذا الطلب مدفوع مسبقاً" }, { status: 409 });
   }
+  // ملكية الطلب: جلسة OTP مطابقة، أو رقم هاتف الطلب نفسه (يرسله الدفع بعد إنشاء الطلب)
   const session = customerFromRequest(req);
-  if (session && session.phone !== order.phone) {
-    return Response.json({ error: "هذا الطلب ليس لك" }, { status: 403 });
+  const phone = String(body.phone ?? "").replace(/\s/g, "");
+  const codeOk = !body.code || String(body.code) === order.code;
+  const allowed = session ? session.phone === order.phone : Boolean(phone) && phone === order.phone && codeOk;
+  if (!allowed) {
+    return Response.json(
+      { error: "تحقّقي من رقم هاتف الطلب أولاً — أو سجّلي برمز SMS" },
+      { status: 401 }
+    );
   }
 
   const publicBase = env.publicBaseUrl || req.nextUrl.origin;

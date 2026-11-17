@@ -31,6 +31,8 @@ jobs:
       CUSTOMER_SESSION_SECRET: ci-customer-session-secret-0123456789
       STAFF_SESSION_SECRET: ci-staff-session-secret-0123456789
       OTP_DEV_ECHO: "1"
+      # مزوّد الدفع الوهمي للاختبار فقط (يُرفض في الإنتاج)
+      PAYMENT_SANDBOX: "1"
     steps:
       - uses: actions/checkout@v4
 
