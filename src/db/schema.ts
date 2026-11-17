@@ -391,3 +391,21 @@ export const productSizeStock = pgTable(
 );
 
 export type ProductSizeStockRow = typeof productSizeStock.$inferSelect;
+
+
+/* ───────────────────────── حسابات الإدارة ───────────────────────── */
+
+/**
+ * حسابات لوحة الإدارة — مالك (كل الصلاحيات) أو مدير (كل شيء عدا إدارة الحسابات).
+ * الرمز PIN مُجزّأ، والجلسة تحمل اسم صاحبها حتى يُنسب كل إجراء لشخصه في التدقيق.
+ */
+export const adminUsers = pgTable("admin_users", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 140 }).notNull().unique(),
+  pinHash: varchar("pin_hash", { length: 200 }).notNull(),
+  role: varchar("role", { length: 16 }).notNull().default("manager"), // owner | manager
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AdminUserRow = typeof adminUsers.$inferSelect;

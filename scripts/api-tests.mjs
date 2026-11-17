@@ -802,6 +802,51 @@ async function run() {
     return `${withEvents.events.length} حدث موثّق • ${o.history.length} مخفّف ✓`;
   });
 
+  // 51) حسابات الإدارة: مدير يدخل باسمه، ولا يملك إدارة الحسابات
+  await test("حسابات الإدارة ودور المدير", async () => {
+    const pin = "1379";
+    const created = await fetch(`${BASE}/api/admin/users`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ name: "QA-ADMIN", role: "manager", pin }),
+    }).then(j);
+    assert(created.user?.id, JSON.stringify(created));
+
+    const login = await fetch(`${BASE}/api/admin/login`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ name: "QA-ADMIN", pin }),
+    });
+    assert(login.ok, `manager login ${login.status}`);
+    const lj = await login.json();
+    assert(lj.role === "manager", JSON.stringify(lj));
+    const managerCookie = (login.headers.get("set-cookie") || "").split(";")[0];
+
+    const forbidden = await fetch(`${BASE}/api/admin/users`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: managerCookie },
+      body: JSON.stringify({ name: "QA-ESCAPE", role: "owner", pin: "1234" }),
+    });
+    assert(forbidden.status === 403, `manager created account: ${forbidden.status}`);
+
+    const statsOk = await fetch(`${BASE}/api/admin/stats`, { headers: { cookie: managerCookie } });
+    assert(statsOk.ok, "manager cannot read stats");
+
+    const del = await fetch(`${BASE}/api/admin/users?id=${created.user.id}`, {
+      method: "DELETE",
+      headers: { cookie: adminCookie },
+    });
+    assert(del.ok, "owner could not delete account");
+
+    const after = await fetch(`${BASE}/api/admin/login`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ name: "QA-ADMIN", pin }),
+    });
+    assert(after.status === 401, `deleted account still logs in: ${after.status}`);
+    return "مدير بلا صلاحية حسابات ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

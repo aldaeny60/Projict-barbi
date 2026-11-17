@@ -35,7 +35,7 @@ type Stats = {
   recentOrders: { id: number; code: string; source: string; customerName: string; governorate: string | null; total: number; status: string; paymentMethod: string; createdAt: string }[];
 };
 
-type Tab = "overview" | "products" | "orders" | "customers" | "coupons" | "delivery" | "inventory" | "branches" | "team" | "audit" | "market";
+type Tab = "overview" | "products" | "orders" | "customers" | "coupons" | "delivery" | "inventory" | "branches" | "team" | "accounts" | "audit" | "market";
 
 const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "overview", label: "نظرة عامة", icon: LayoutDashboard },
@@ -47,6 +47,7 @@ const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "inventory", label: "المخزون", icon: Boxes },
   { key: "branches", label: "الفروع", icon: Store },
   { key: "team", label: "الفريق والصلاحيات", icon: Users },
+  { key: "accounts", label: "حسابات الإدارة", icon: Lock },
   { key: "audit", label: "سجل التدقيق", icon: ScrollText },
   { key: "market", label: "رصد السوق", icon: Globe },
 ];
@@ -65,6 +66,8 @@ const STATUS_TONE: Record<string, string> = {
 export default function AdminPage() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [code, setCode] = useState("");
+  const [adminName, setAdminName] = useState("");
+  const [adminRole, setAdminRole] = useState<"owner" | "manager">("owner");
   const [tab, setTab] = useState<Tab>("overview");
   const [stats, setStats] = useState<Stats | null>(null);
 
@@ -89,10 +92,14 @@ export default function AdminPage() {
     const r = await fetch("/api/admin/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin: code }),
+      body: JSON.stringify({ pin: code, name: adminName.trim() || undefined }),
     });
-    if (r.ok) setAuthed(true);
-    else {
+    if (r.ok) {
+      const d = await r.json().catch(() => null);
+      if (d?.role === "manager") setAdminRole("manager");
+      else setAdminRole("owner");
+      setAuthed(true);
+    } else {
       const d = await r.json().catch(() => null);
       setPinError(d?.error ?? "تعذر الدخول");
     }
@@ -101,7 +108,10 @@ export default function AdminPage() {
     await fetch("/api/admin/login", { method: "DELETE" });
     setAuthed(false);
     setCode("");
+    setAdminName("");
   };
+
+  const visibleTabs = TABS.filter((t) => t.key !== "accounts" || adminRole === "owner");
 
   if (authed === null) return null;
 
@@ -113,7 +123,13 @@ export default function AdminPage() {
             <Lock className="text-lilac-600" size={26} />
           </span>
           <h1 className="mt-4 text-xl font-black">لوحة تحكم باربي</h1>
-          <p className="mt-1 text-xs font-bold text-ink-soft">منطقة الإدارة — يُضبط رمز الدخول من متغير البيئة ADMIN_PIN</p>
+          <p className="mt-1 text-xs font-bold text-ink-soft">أدخل اسم حسابك ورمزه — أو اترك الاسم فارغاً لرمز المالك من ADMIN_PIN</p>
+          <input
+            value={adminName}
+            onChange={(e) => setAdminName(e.target.value)}
+            placeholder="اسم الحساب (اختياري)"
+            className="field mt-4 text-center text-sm font-black"
+          />
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/[^\d]/g, ""))}
@@ -122,7 +138,7 @@ export default function AdminPage() {
             dir="ltr"
             inputMode="numeric"
             maxLength={8}
-            className="field mt-5 text-center text-2xl font-black tracking-[0.5em]"
+            className="field mt-2.5 text-center text-2xl font-black tracking-[0.5em]"
           />
           {pinError && <p className="mt-2 text-center text-[11px] font-black text-blush-600">{pinError}</p>}
           <button
@@ -153,7 +169,7 @@ export default function AdminPage() {
             </span>
           </Link>
           <nav className="flex-1 space-y-1">
-            {TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`flex w-full items-center gap-2.5 rounded-2xl px-3.5 py-3 text-sm font-black transition-all ${tab === t.key ? "bg-ink text-white shadow-pop" : "text-ink-soft hover:bg-blush-50 hover:text-ink"}`}>
                 <t.icon size={16} /> {t.label}
@@ -173,7 +189,7 @@ export default function AdminPage() {
         <div className="min-w-0">
           {/* mobile tabs */}
           <div className="sticky top-0 z-30 flex gap-1.5 overflow-x-auto border-b border-black/5 bg-white/90 px-3 py-2.5 backdrop-blur lg:hidden no-scrollbar">
-            {TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <button key={t.key} onClick={() => setTab(t.key)} className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-xs font-black ${tab === t.key ? "bg-ink text-white" : "bg-paper text-ink-soft"}`}>
                 <t.icon size={13} /> {t.label}
               </button>
@@ -184,7 +200,9 @@ export default function AdminPage() {
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-black">{TABS.find((t) => t.key === tab)?.label}</h1>
-                <p className="text-xs font-bold text-ink-faint">توقيت بغداد (GMT+3) • الأسعار بالدينار العراقي</p>
+                <p className="text-xs font-bold text-ink-faint">
+                  {adminRole === "owner" ? "مالك — كل الصلاحيات" : "مدير — كل شيء عدا حسابات الإدارة"} • توقيت بغداد (GMT+3) • الدينار العراقي
+                </p>
               </div>
               <button onClick={() => setStats(null as never) ?? undefined} className="hidden" />
             </div>
@@ -200,6 +218,7 @@ export default function AdminPage() {
                 {tab === "inventory" && <InventoryTab stats={stats} onRefresh={() => fetch("/api/admin/stats").then((r) => r.json()).then(setStats)} />}
                 {tab === "branches" && <BranchesTab />}
                 {tab === "team" && <TeamTab />}
+                {tab === "accounts" && <AccountsTab role={adminRole} />}
                 {tab === "audit" && <AuditTab />}
                 {tab === "market" && <MarketSearchTab />}
               </motion.div>
@@ -1365,6 +1384,183 @@ function CustomersTab() {
               {rows?.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-sm font-bold text-ink-faint">لا يوجد زبائن مطابقون</td></tr>}
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ═══ حسابات الإدارة ═══ */
+
+type AdminUserRow = { id: number; name: string; role: string; active: boolean; createdAt: string };
+
+function AccountsTab({ role }: { role: "owner" | "manager" }) {
+  const [users, setUsers] = useState<AdminUserRow[] | null>(null);
+  const [form, setForm] = useState({ name: "", pin: "", role: "manager" });
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [pinFor, setPinFor] = useState<{ id: number; value: string } | null>(null);
+
+  const load = useCallback(() => {
+    fetch("/api/admin/users")
+      .then((r) => r.json())
+      .then((d) => setUsers(d.users ?? []))
+      .catch(() => setUsers([]));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (role !== "owner") {
+    return (
+      <div className="card-bubble p-8 text-center">
+        <Lock className="mx-auto text-ink-faint" size={26} />
+        <p className="mt-3 text-sm font-black">حسابات الإدارة للمالك فقط</p>
+        <p className="mt-1 text-xs font-bold text-ink-soft">سجّل بحساب المالك لتعديل الحسابات والرموز.</p>
+      </div>
+    );
+  }
+
+  const create = async () => {
+    setErr("");
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? "تعذر إنشاء الحساب");
+      setForm({ name: "", pin: "", role: "manager" });
+      load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "تعذر إنشاء الحساب");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const patch = async (id: number, body: Record<string, unknown>) => {
+    setErr("");
+    const r = await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...body }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      setErr(d.error ?? "تعذر التحديث");
+    }
+    load();
+  };
+
+  const remove = async (id: number) => {
+    const r = await fetch(`/api/admin/users?id=${id}`, { method: "DELETE" });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      setErr(d.error ?? "تعذر الحذف");
+    }
+    load();
+  };
+
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-[1fr_340px]">
+      <div className="space-y-2.5">
+        {users === null && <div className="shimmer h-32 rounded-3xl" />}
+        {users?.map((u) => (
+          <div key={u.id} className="card-bubble p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className={`grid size-10 place-items-center rounded-2xl ${u.active ? "bg-lilac-100 text-lilac-700" : "bg-ink/5 text-ink-faint"}`}>
+                  <Lock size={16} />
+                </span>
+                <div>
+                  <p className="text-sm font-black">{u.name}</p>
+                  <p className="text-[11px] font-bold text-ink-soft">
+                    {u.role === "owner" ? "مالك" : "مدير"} • {u.active ? "مفعّل" : "موقوف"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={u.role}
+                  onChange={(e) => patch(u.id, { role: e.target.value })}
+                  className="field w-auto cursor-pointer py-1.5 text-[11px] font-black"
+                >
+                  <option value="manager">مدير</option>
+                  <option value="owner">مالك</option>
+                </select>
+                <button
+                  onClick={() => setPinFor(pinFor?.id === u.id ? null : { id: u.id, value: "" })}
+                  className="rounded-full bg-ink/5 px-3 py-1.5 text-[10px] font-black text-ink"
+                >
+                  رمز جديد
+                </button>
+                <button
+                  onClick={() => patch(u.id, { active: !u.active })}
+                  className={`rounded-full px-3.5 py-1.5 text-[11px] font-black ${u.active ? "bg-minty-100 text-minty-700" : "bg-ink/5 text-ink-faint"}`}
+                >
+                  {u.active ? "مفعّل" : "موقوف"}
+                </button>
+                <button onClick={() => remove(u.id)} className="grid size-9 place-items-center rounded-xl bg-blush-100 text-blush-600 transition-transform hover:scale-110">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+            {pinFor?.id === u.id && (
+              <div className="mt-3 flex items-center gap-2 border-t border-dashed border-ink/10 pt-3">
+                <input
+                  value={pinFor.value}
+                  onChange={(e) => setPinFor({ id: u.id, value: e.target.value.replace(/[^\d]/g, "") })}
+                  placeholder="رمز من 4 إلى 8 أرقام"
+                  dir="ltr"
+                  inputMode="numeric"
+                  maxLength={8}
+                  className="field w-44 py-2 text-center text-sm font-black"
+                />
+                <button
+                  onClick={async () => { await patch(u.id, { pin: pinFor.value }); setPinFor(null); }}
+                  disabled={pinFor.value.length < 4}
+                  className="rounded-xl bg-ink px-4 py-2.5 text-[11px] font-black text-white disabled:opacity-40"
+                >
+                  حفظ الرمز
+                </button>
+                <button onClick={() => setPinFor(null)} className="text-[11px] font-black text-ink-soft">إلغاء</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="card-bubble h-fit p-5">
+        <h3 className="mb-3 text-sm font-black">حساب إداري جديد</h3>
+        <div className="space-y-2.5">
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="اسم الحساب (مثل: أم حسين)" className="field text-sm" />
+          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="field cursor-pointer text-sm">
+            <option value="manager">مدير</option>
+            <option value="owner">مالك</option>
+          </select>
+          <input
+            value={form.pin}
+            onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/[^\d]/g, "") })}
+            placeholder="رمز الدخول (4–8 أرقام)"
+            dir="ltr"
+            inputMode="numeric"
+            maxLength={8}
+            className="field text-center text-sm font-black"
+          />
+          {err && <p className="text-[11px] font-black text-blush-600">{err}</p>}
+          <button
+            onClick={create}
+            disabled={busy || form.name.trim().length < 2 || form.pin.length < 4}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-3 text-sm font-black text-white transition-transform hover:scale-[1.02] disabled:opacity-50"
+          >
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} إنشاء الحساب
+          </button>
+          <p className="text-[10px] font-bold leading-5 text-ink-faint">
+            كل إجراء يُنسب لاسم صاحب الحساب في سجل التدقيق. «المالك» يدير الحسابات، و«المدير» يدير المتجر بلا صلاحية على الحسابات.
+          </p>
         </div>
       </div>
     </div>

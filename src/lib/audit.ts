@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { auditLogs } from "@/db/schema";
 import type { NextRequest } from "next/server";
+import { adminSession } from "./admin-auth";
 
 /**
  * سجل التدقيق — كل عملية حسّاسة (دخول، تغيير حالة طلب، تعديل منتج، بيع، مرتجع،
@@ -17,7 +18,7 @@ export function ipOf(req: NextRequest): string | null {
 }
 
 export const adminActor = (req: NextRequest): AuditActor => ({
-  actor: "admin",
+  actor: adminSession(req)?.name ?? "admin",
   role: "admin",
   ip: ipOf(req),
 });

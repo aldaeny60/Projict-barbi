@@ -79,6 +79,8 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 ### الإدارة
 - `GET /api/admin/stats` — بطاقات + سلسلة 14 يوم + بوابات الدفع + المحافظات + أفضل المنتجات + مخزون منخفض.
 - `POST /api/admin/stats {status}` — قائمة الطلبات المفلترة. `PATCH` — `{productId, add}` لإعادة التخزين.
+- `POST /api/admin/login {name?, pin}` — باسم حساب إداري تُبنى الجلسة باسمه ودوره؛ وبلا اسم يُقبل `ADMIN_PIN` كمالك. `DELETE` خروج.
+- `GET/POST/PATCH/DELETE /api/admin/users` — حسابات الإدارة (المالك فقط): اسم + رمز PIN + دور (owner/manager). آخر مالك مفعّل محمي من الحذف/الإيقاف، والمدير يحصل 403.
 - `GET/POST/PATCH/DELETE /api/admin/staff` — حسابات الموظفين: الاسم والدور والفرع ورمز PIN (4–8 أرقام، يُخزَّن scrypt). لا يُعاد أي hash.
 - `GET /api/admin/customers?q=` — الزبائن مع عدد الطلبات والإنفاق الصافي وآخر طلب.
 - `GET /api/admin/export?type=orders|customers` — CSV (UTF-8 مع BOM لـ Excel) للطلبات أو الزبائن، للإدارة فقط، ويُسجَّل في التدقيق.
