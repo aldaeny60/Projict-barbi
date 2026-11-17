@@ -1220,6 +1220,26 @@ async function run() {
     return "401 بلا جلسة • 400 بلا سبب • مدفوع + سجل + 409 للتكرار ✓";
   });
 
+  // 61) إعادة محاولة الدفع: الطلب بالكود لصاحبه فقط
+  await test("جلب الطلب بالكود لإعادة الدفع (لصاحبه)", async () => {
+    const anon = await fetch(`${BASE}/api/orders/by-code/${encodeURIComponent(orderCode)}`);
+    assert(anon.status === 401, `anon by-code got ${anon.status}`);
+
+    const mine = await fetch(`${BASE}/api/orders/by-code/${encodeURIComponent(orderCode)}`, {
+      headers: { cookie: custCookie },
+    }).then(j);
+    assert(mine.order?.id, JSON.stringify(mine));
+
+    const other = await fetch(`${BASE}/api/orders/by-code/${encodeURIComponent(orderCode)}`, {
+      headers: { cookie: staffCookie },
+    });
+    assert(other.status === 401 || other.status === 404, `staff/other got ${other.status}`);
+
+    const missing = await fetch(`${BASE}/api/orders/by-code/ZZZ-000`, { headers: { cookie: custCookie } });
+    assert(missing.status === 404, `unknown code got ${missing.status}`);
+    return "لصاحبه فقط + 404 لغير الموجود ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

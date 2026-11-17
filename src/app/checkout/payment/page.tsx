@@ -1,11 +1,19 @@
 import Link from "next/link";
-import { CheckCircle2, XCircle, AlertTriangle, Receipt } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Receipt, RotateCcw } from "lucide-react";
+import { db } from "@/db";
+import { orders } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { providerConfigured } from "@/lib/payment-gateway";
+import { PaymentRetry } from "@/components/PaymentRetry";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = { title: "نتيجة الدفع" };
 
 /**
  * صفحة نتيجة الدفع — يوجّه إليها إشعار البوابة.
  * تعرض الحالة فقط؛ لا تعتبر الدفع ناجحاً من تلقاء نفسها (الخادم هو من يقرر).
+ * عند الفشل تُعرض إعادة المحاولة فقط إذا كان الطلب ما زال بانتظار الدفع.
  */
 export default async function PaymentResultPage({
   searchParams,
@@ -16,6 +24,20 @@ export default async function PaymentResultPage({
   const paid = status === "paid";
   const invalid = status === "invalid" || status === "unknown";
   const Icon = paid ? CheckCircle2 : invalid ? AlertTriangle : XCircle;
+
+  let retryable = false;
+  let provider = "zaincash";
+  if (!paid && code) {
+    const [order] = await db
+      .select({ id: orders.id, paymentMethod: orders.paymentMethod, paymentStatus: orders.paymentStatus })
+      .from(orders)
+      .where(eq(orders.code, code))
+      .limit(1);
+    if (order && order.paymentStatus !== "paid" && order.paymentMethod !== "cod") {
+      provider = order.paymentMethod;
+      retryable = providerConfigured(provider);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-md px-4 py-14">
@@ -43,6 +65,9 @@ export default async function PaymentResultPage({
           </p>
         )}
         <div className="mt-6 grid gap-2">
+          {retryable && code && (
+            <PaymentRetry code={code} provider={provider} />
+          )}
           <Link href="/account?tab=orders" className="rounded-2xl bg-ink py-3 text-sm font-black text-white">
             طلباتي
           </Link>
@@ -50,6 +75,11 @@ export default async function PaymentResultPage({
             متابعة التسوق
           </Link>
         </div>
+        {!paid && (
+          <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] font-bold text-ink-faint">
+            <RotateCcw size={11} /> إعادة المحاولة متاحة إذا كانت البوابة مفعّلة على المتجر
+          </p>
+        )}
       </div>
     </div>
   );
