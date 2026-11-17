@@ -847,6 +847,22 @@ async function run() {
     return "مدير بلا صلاحية حسابات ✓";
   });
 
+  // 52) البحث العربي يتجاوز اختلاف الهمزة والتاء المربوطة
+  await test("البحث العربي المتسامح (همزات/تاء مربوطة)", async () => {
+    const withHamza = await fetch(`${BASE}/api/products?q=${encodeURIComponent("أطفال")}&limit=100`).then(j);
+    const plain = await fetch(`${BASE}/api/products?q=${encodeURIComponent("اطفال")}&limit=100`).then(j);
+    assert(plain.products.length > 0, "plain spelling found nothing");
+    assert(withHamza.products.length > 0, "hamza spelling found nothing");
+    assert(
+      plain.products.length === withHamza.products.length,
+      `variants differ: ${plain.products.length} vs ${withHamza.products.length}`
+    );
+
+    const taMarbuta = await fetch(`${BASE}/api/search?q=${encodeURIComponent("فساتين")}`).then(j);
+    assert(Array.isArray(taMarbuta.suggestions), "search suggestions missing");
+    return `${plain.products.length} نتيجة بالصيغتين ✓`;
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");
