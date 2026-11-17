@@ -35,7 +35,7 @@ type Stats = {
   recentOrders: { id: number; code: string; source: string; customerName: string; governorate: string | null; total: number; status: string; paymentMethod: string; createdAt: string }[];
 };
 
-type Tab = "overview" | "products" | "orders" | "customers" | "coupons" | "delivery" | "inventory" | "branches" | "team" | "accounts" | "audit" | "market";
+type Tab = "overview" | "products" | "orders" | "customers" | "coupons" | "delivery" | "inventory" | "branches" | "team" | "accounts" | "api" | "audit" | "market";
 
 const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "overview", label: "نظرة عامة", icon: LayoutDashboard },
@@ -48,6 +48,7 @@ const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "branches", label: "الفروع", icon: Store },
   { key: "team", label: "الفريق والصلاحيات", icon: Users },
   { key: "accounts", label: "حسابات الإدارة", icon: Lock },
+  { key: "api", label: "مفاتيح API", icon: Globe },
   { key: "audit", label: "سجل التدقيق", icon: ScrollText },
   { key: "market", label: "رصد السوق", icon: Globe },
 ];
@@ -122,7 +123,9 @@ export default function AdminPage() {
     setAdminName("");
   };
 
-  const visibleTabs = TABS.filter((t) => t.key !== "accounts" || adminRole === "owner");
+  const visibleTabs = TABS.filter(
+    (t) => (t.key !== "accounts" && t.key !== "api") || adminRole === "owner"
+  );
 
   if (authed === null) return null;
 
@@ -230,6 +233,7 @@ export default function AdminPage() {
                 {tab === "branches" && <BranchesTab />}
                 {tab === "team" && <TeamTab />}
                 {tab === "accounts" && <AccountsTab role={adminRole} />}
+                {tab === "api" && <ApiKeysTab role={adminRole} />}
                 {tab === "audit" && <AuditTab />}
                 {tab === "market" && <MarketSearchTab />}
               </motion.div>
@@ -1572,6 +1576,153 @@ function AccountsTab({ role }: { role: "owner" | "manager" }) {
           <p className="text-[10px] font-bold leading-5 text-ink-faint">
             كل إجراء يُنسب لاسم صاحب الحساب في سجل التدقيق. «المالك» يدير الحسابات، و«المدير» يدير المتجر بلا صلاحية على الحسابات.
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ مفاتيح API ═══ */
+
+type ApiKeyRow = {
+  id: number;
+  name: string;
+  prefix: string;
+  active: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+};
+
+function ApiKeysTab({ role }: { role: "owner" | "manager" }) {
+  const [keys, setKeys] = useState<ApiKeyRow[] | null>(null);
+  const [name, setName] = useState("");
+  const [secret, setSecret] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    fetch("/api/admin/api-keys")
+      .then((r) => r.json())
+      .then((d) => setKeys(d.keys ?? []))
+      .catch(() => setKeys([]));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  if (role !== "owner") {
+    return (
+      <div className="card-bubble p-8 text-center">
+        <Globe className="mx-auto text-ink-faint" size={26} />
+        <p className="mt-3 text-sm font-black">مفاتيح API للمالك فقط</p>
+        <p className="mt-1 text-xs font-bold text-ink-soft">سجّل بحساب المالك لإنشاء مفاتيح للواجهات الخارجية.</p>
+      </div>
+    );
+  }
+
+  const create = async () => {
+    setErr("");
+    setSecret("");
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? "تعذر إنشاء المفتاح");
+      setSecret(d.secret ?? "");
+      setName("");
+      load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "تعذر إنشاء المفتاح");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = async (id: number, active: boolean) => {
+    await fetch("/api/admin/api-keys", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, active }),
+    });
+    load();
+  };
+
+  const remove = async (id: number) => {
+    await fetch(`/api/admin/api-keys?id=${id}`, { method: "DELETE" });
+    load();
+  };
+
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-[1fr_360px]">
+      <div className="space-y-2.5">
+        {keys === null && <div className="shimmer h-32 rounded-3xl" />}
+        {keys?.length === 0 && (
+          <div className="card-bubble p-8 text-center text-sm font-bold text-ink-soft">
+            لا مفاتيح بعد — أنشئ مفتاحاً ليقرأ التطبيق أو الشريك الكتالوج عبر <span dir="ltr">/api/v1/products</span>
+          </div>
+        )}
+        {keys?.map((k) => (
+          <div key={k.id} className="card-bubble flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="flex items-center gap-3">
+              <span className={`grid size-10 place-items-center rounded-2xl ${k.active ? "bg-aqua-100 text-aqua-700" : "bg-ink/5 text-ink-faint"}`}>
+                <Globe size={16} />
+              </span>
+              <div>
+                <p className="text-sm font-black">{k.name}</p>
+                <p className="text-[11px] font-bold text-ink-soft" dir="ltr">{k.prefix}…</p>
+                <p className="text-[10px] font-bold text-ink-faint">
+                  {k.lastUsedAt ? `آخر استخدام ${fmtDateTime(k.lastUsedAt)}` : "لم يُستخدم بعد"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => toggle(k.id, !k.active)}
+                className={`rounded-full px-3.5 py-1.5 text-[11px] font-black ${k.active ? "bg-minty-100 text-minty-700" : "bg-ink/5 text-ink-faint"}`}
+              >
+                {k.active ? "مفعّل" : "موقوف"}
+              </button>
+              <button onClick={() => remove(k.id)} className="grid size-9 place-items-center rounded-xl bg-blush-100 text-blush-600 transition-transform hover:scale-110">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card-bubble h-fit p-5">
+        <h3 className="mb-3 text-sm font-black">مفتاح قراءة جديد</h3>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="لمن؟ (تطبيق باربي، شريك…)" className="field text-sm" />
+        {err && <p className="mt-2 text-[11px] font-black text-blush-600">{err}</p>}
+        <button
+          onClick={create}
+          disabled={busy || name.trim().length < 2}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-3 text-sm font-black text-white transition-transform hover:scale-[1.02] disabled:opacity-50"
+        >
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} إنشاء المفتاح
+        </button>
+
+        {secret && (
+          <div className="mt-3 rounded-2xl bg-butter-100 p-3">
+            <p className="text-[10px] font-black text-butter-700">انسخه الآن — لن يظهر مرة ثانية</p>
+            <code className="mt-1 block break-all rounded-xl bg-white p-2 text-[11px] font-black" dir="ltr">{secret}</code>
+            <button
+              onClick={() => { navigator.clipboard?.writeText(secret).catch(() => {}); }}
+              className="mt-2 w-full rounded-xl bg-ink py-2 text-[11px] font-black text-white"
+            >
+              نسخ المفتاح
+            </button>
+          </div>
+        )}
+
+        <div className="mt-4 space-y-1.5 rounded-2xl bg-paper p-3 text-[10px] font-bold leading-5 text-ink-soft">
+          <p className="text-[11px] font-black text-ink">الاستخدام</p>
+          <p dir="ltr" className="break-all">GET /api/v1/products</p>
+          <p dir="ltr" className="break-all">GET /api/v1/categories</p>
+          <p dir="ltr" className="break-all">Authorization: Bearer &lt;key&gt;</p>
+          <p>قراءة فقط: كتالوج وتصنيفات. لا أسعار تكلفة ولا بيانات زبائن. الحد 120 طلباً/دقيقة لكل مفتاح.</p>
         </div>
       </div>
     </div>

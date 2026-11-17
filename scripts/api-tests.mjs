@@ -946,6 +946,40 @@ async function run() {
     return "السعر والمخزون والتكلفة ≥ 0 ✓";
   });
 
+  // 55) مفاتيح API: مفتاح للقراءة فقط، بلا تكلفة ولا بيانات زبائن، ويُبطَل فوراً
+  await test("مفاتيح API العامة (قراءة فقط)", async () => {
+    const anon = await fetch(`${BASE}/api/v1/products`);
+    assert(anon.status === 401, `anon v1 got ${anon.status}`);
+
+    const created = await fetch(`${BASE}/api/admin/api-keys`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ name: "QA app key" }),
+    }).then(j);
+    assert(created.secret?.startsWith("barbi_"), JSON.stringify(created));
+    const key = created.secret;
+
+    const list = await fetch(`${BASE}/api/v1/products?limit=5`, {
+      headers: { Authorization: `Bearer ${key}` },
+    }).then(j);
+    assert(Array.isArray(list.products) && list.products.length > 0, "v1 products empty");
+    assert(list.products.every((p) => p.costPrice === undefined), "costPrice leaked via API key");
+
+    const cats = await fetch(`${BASE}/api/v1/categories`, { headers: { "x-api-key": key } }).then(j);
+    assert(Array.isArray(cats.categories) && cats.categories.length > 0, "v1 categories empty");
+
+    const bad = await fetch(`${BASE}/api/v1/products`, { headers: { "x-api-key": "barbi_wrong_key_1234567890" } });
+    assert(bad.status === 401, `bogus key got ${bad.status}`);
+
+    await fetch(`${BASE}/api/admin/api-keys?id=${created.key.id}`, {
+      method: "DELETE",
+      headers: { cookie: adminCookie },
+    });
+    const revoked = await fetch(`${BASE}/api/v1/products`, { headers: { "x-api-key": key } });
+    assert(revoked.status === 401, `revoked key still works: ${revoked.status}`);
+    return "قراءة فقط + إبطال فوري ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

@@ -416,3 +416,22 @@ export const adminUsers = pgTable("admin_users", {
 });
 
 export type AdminUserRow = typeof adminUsers.$inferSelect;
+
+
+/* ───────────────────────── مفاتيح API الخارجية ───────────────────────── */
+
+/**
+ * مفاتيح قراءة للواجهات الخارجية (تطبيق مستقبلي/شريك).
+ * يُخزَّن هاش SHA-256 فقط، ويُعرض المفتاح مرة واحدة عند إنشائه.
+ */
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 140 }).notNull(),
+  prefix: varchar("prefix", { length: 16 }).notNull(),
+  keyHash: varchar("key_hash", { length: 64 }).notNull().unique(),
+  active: boolean("active").notNull().default(true),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ApiKeyRow = typeof apiKeys.$inferSelect;
