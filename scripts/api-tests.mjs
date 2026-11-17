@@ -920,6 +920,32 @@ async function run() {
     return `تقييم باسم ${ok.author} بدون تكرار ✓`;
   });
 
+  // 54) قيم سالبة أو تالفة في تعديل المنتج لا تُحفظ
+  await test("رفض القيم السالبة في المنتج", async () => {
+    const r = await fetch(`${BASE}/api/products/${idemP.id}`, {
+      method: "PATCH",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ price: -500, stock: -20, costPrice: -1 }),
+    }).then(j);
+    assert(r.product, JSON.stringify(r));
+    assert(r.product.price === 0, `price ${r.product.price}`);
+    assert(r.product.stock === 0, `stock ${r.product.stock}`);
+    assert(r.product.costPrice === 0, `cost ${r.product.costPrice}`);
+
+    // إعادة القيم الأصلية حتى لا تؤثر على بقية التشغيل
+    await fetch(`${BASE}/api/products/${idemP.id}`, {
+      method: "PATCH",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({
+        price: idemP.price,
+        stock: idemP.stock,
+        costPrice: idemP.costPrice ?? 0,
+        sizeStock: idemP.sizeStock,
+      }),
+    });
+    return "السعر والمخزون والتكلفة ≥ 0 ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

@@ -4,11 +4,15 @@ import { eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { formatIQD } from "@/lib/format";
 import { getCouponDiscount } from "@/lib/order-utils";
+import { checkRateLimit, clientKey, rateLimited } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 /** تحقق من كود خصم — يستخدم نفس منطق الخادم عند إنشاء الطلب (حد استخدام + انتهاء) */
 export async function POST(req: NextRequest) {
+  const rl = checkRateLimit(clientKey(req, "coupon-validate"), 40, 60_000);
+  if (!rl.allowed) return rateLimited(rl.retryAfterSec);
+
   const body = (await req.json().catch(() => ({}))) as { code?: string; subtotal?: number; phone?: string };
   const code = (body.code ?? "").trim().toUpperCase();
   const subtotal = Math.round(Number(body.subtotal ?? 0));

@@ -29,7 +29,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (body[k] !== undefined) patch[k] = body[k];
   }
   for (const k of ["price", "costPrice", "compareAtPrice", "stock", "categoryId", "soldCount"] as const) {
-    if (body[k] !== undefined) patch[k] = body[k] === null ? null : Math.round(Number(body[k]));
+    if (body[k] === undefined) continue;
+    if (body[k] === null) {
+      // المقارنة القديمة فقط تقبل null؛ السعر والمخزون والتصنيف لا
+      patch[k] = k === "compareAtPrice" ? null : 0;
+      continue;
+    }
+    const n = Math.round(Number(body[k]));
+    patch[k] = Number.isFinite(n) ? Math.max(0, n) : 0;
   }
   for (const k of ["images", "colors", "sizes"] as const) {
     if (body[k] !== undefined) patch[k] = body[k];
