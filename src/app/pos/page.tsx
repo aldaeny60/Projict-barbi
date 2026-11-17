@@ -240,19 +240,39 @@ export default function PosPage() {
   };
 
   /* sync queue */
+  const [queueErrors, setQueueErrors] = useState<{ item: object; message: string }[]>([]);
+  const [showQueueErrors, setShowQueueErrors] = useState(false);
+
   const syncQueue = async () => {
     if (!queue.length || syncing) return;
     setSyncing(true);
     const rest: object[] = [];
+    const errors: { item: object; message: string }[] = [];
     for (const item of queue) {
       try {
         const r = await fetch("/api/pos/sale", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(item) });
-        if (!r.ok) rest.push(item);
-      } catch { rest.push(item); }
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          rest.push(item);
+          errors.push({ item, message: d.error ?? `رفض الخادم (${r.status})` });
+        }
+      } catch {
+        rest.push(item);
+        errors.push({ item, message: "تعذر الاتصال بالخادم" });
+      }
     }
     setQueue(rest);
     localStorage.setItem(QUEUE_KEY, JSON.stringify(rest));
+    setQueueErrors(errors);
+    setShowQueueErrors(errors.length > 0);
     setSyncing(false);
+  };
+
+  const dropQueued = (item: object) => {
+    const next = queue.filter((q) => q !== item);
+    setQueue(next);
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(next));
+    setQueueErrors((prev) => prev.filter((e) => e.item !== item));
   };
 
   /* report + returns */
@@ -301,6 +321,11 @@ export default function PosPage() {
             <button onClick={syncQueue} className="flex items-center gap-1.5 rounded-full bg-butter-400 px-3 py-2 text-[11px] font-black text-ink shadow-soft transition-transform hover:scale-105">
               {syncing ? <Loader2 size={13} className="animate-spin" /> : <CloudUpload size={13} />}
               مزامنة {queue.length} فاتورة
+            </button>
+          )}
+          {queueErrors.length > 0 && (
+            <button onClick={() => setShowQueueErrors(true)} className="flex items-center gap-1.5 rounded-full bg-blush-100 px-3 py-2 text-[11px] font-black text-blush-600 shadow-soft">
+              مشاكل المزامنة ({queueErrors.length})
             </button>
           )}
 
@@ -625,6 +650,43 @@ export default function PosPage() {
             await loadReport(); setShowReport(true);
           }}
         />
+      </Modal>
+
+      {/* ═══ queue errors ═══ */}
+      <Modal open={showQueueErrors} onClose={() => setShowQueueErrors(false)}>
+        <h3 className="flex items-center gap-2 text-base font-black"><WifiOff className="text-blush-500" /> فواتير لم تُزامن</h3>
+        <p className="mt-1 text-xs font-bold leading-6 text-ink-faint">
+          محفوظة على هذا الجهاز ولم تُسجَّل على الخادم. راجع السبب ثم أعد المحاولة، أو احذفها بعد إدخالها يدوياً.
+        </p>
+        <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+          {queueErrors.map((e, i) => {
+            const it = e.item as { total?: number; offlineAt?: string };
+            return (
+              <div key={i} className="rounded-2xl bg-paper p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-black">{it.total ? formatIQD(it.total) : "فاتورة"}</span>
+                  <span className="text-[10px] font-bold text-ink-faint">
+                    {it.offlineAt ? fmtDateTime(it.offlineAt) : ""}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] font-black text-blush-600">{e.message}</p>
+                <button
+                  onClick={() => dropQueued(e.item)}
+                  className="mt-2 rounded-lg bg-white px-3 py-1.5 text-[10px] font-black text-ink ring-1 ring-ink/10"
+                >
+                  حذف من الطابور
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <button
+          onClick={() => { setShowQueueErrors(false); syncQueue(); }}
+          disabled={syncing}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-3 text-sm font-black text-white disabled:opacity-50"
+        >
+          {syncing ? <Loader2 size={15} className="animate-spin" /> : <CloudUpload size={15} />} إعادة المحاولة
+        </button>
       </Modal>
 
       {/* ═══ drawer modal ═══ */}
