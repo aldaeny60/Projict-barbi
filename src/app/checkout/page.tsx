@@ -170,6 +170,26 @@ export default function CheckoutPage() {
       if (!r.ok) throw new Error(d.error ?? "تعذر إنشاء الطلب");
       setInvoice(d.invoice);
       setSmsState(d.notifications?.sms ?? "skipped");
+
+      // دفع إلكتروني: ننتقل لبوابة المزوّد إن كانت مفعّلة، وإلا نبقى على الفاتورة
+      if (method !== "cod" && d.order?.id) {
+        try {
+          const pr = await fetch("/api/payments/init", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId: d.order.id, provider: method }),
+          });
+          const pd = await pr.json().catch(() => ({}));
+          if (pr.ok && pd.redirectUrl) {
+            window.location.href = pd.redirectUrl;
+            return;
+          }
+          if (pd?.error) toast(pd.error, "err");
+        } catch {
+          toast("تعذر بدء الدفع الإلكتروني — طلبك مسجّل ويمكنك الدفع عند الاستلام", "err");
+        }
+      }
+
       // مفتاح جديد للطلب القادم — إعادة إرسال هذا الطلب لن تُنشئ نسخة ثانية
       requestIdRef.current = newRequestId();
       clear();

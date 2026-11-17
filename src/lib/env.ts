@@ -76,6 +76,25 @@ export const env = {
   /** إظهار رمز OTP في الرد — تطوير فقط أو بموافقة صريحة */
   canEchoOtp: !isProd || process.env.OTP_DEV_ECHO === "1",
 
+  /** بوابات الدفع: لا تعمل إلا عند ضبط اعتماد التاجر */
+  payments: {
+    zaincash: {
+      msisdn: read("ZAINCASH_MSISDN"),
+      merchantId: read("ZAINCASH_MERCHANT_ID"),
+      secret: read("ZAINCASH_SECRET"),
+      /** بيئة الاختبار الافتراضية — الإنتاج يُضبط بـ ZAINCASH_BASE_URL */
+      baseUrl: read("ZAINCASH_BASE_URL", "https://test.zaincash.iq"),
+      get configured(): boolean {
+        return Boolean(read("ZAINCASH_MSISDN") && read("ZAINCASH_MERCHANT_ID") && read("ZAINCASH_SECRET"));
+      },
+    },
+    /**
+     * مزوّد وهمي للاختبارات فقط: يُفعّل صراحةً بـ PAYMENT_SANDBOX=1.
+     * لا يحصّل أي مال — يحاكي نجاح الدفع لاختبار المسار كاملاً.
+     */
+    sandbox: process.env.PAYMENT_SANDBOX === "1",
+  },
+
   /** أجرة توصيل افتراضية لمحافظة غير مسجّلة في جدول الرسوم */
   defaultDeliveryFee: 5000,
 } as const;

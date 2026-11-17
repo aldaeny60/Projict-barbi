@@ -1009,6 +1009,54 @@ async function run() {
     return `${byPhone.orders.length} طلب برقم الهاتف ✓`;
   });
 
+  // 57) الدفع: بلا اعتماد تاجر يرفض بوضوح، ومزوّد الاختبار يمرّ بتوقيع صحيح فقط
+  await test("الدفع الإلكتروني (رفض صريح + تحقق توقيع)", async () => {
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const p = all.products.find((x) => (x.sizeStock ?? []).some((s) => s.stock >= 1));
+    assert(p, "no stock for payment test");
+    const sz = (p.sizeStock ?? []).find((s) => s.stock >= 1).size;
+
+    const order = await fetch(`${BASE}/api/orders`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        customerName: "QA pay",
+        phone: QA_PHONE,
+        governorate: "بغداد",
+        address: "QA pay",
+        paymentMethod: "zaincash",
+        items: [{ productId: p.id, qty: 1, size: sz, color: p.colors[0]?.name }],
+      }),
+    }).then(j);
+    assert(order.ok && order.order?.id, JSON.stringify(order));
+
+    // زين كاش غير مهيّأ في CI → 503 برسالة صريحة، ولا سجل دفع
+    const notConfigured = await fetch(`${BASE}/api/payments/init`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ orderId: order.order.id, provider: "zaincash" }),
+    });
+    assert(notConfigured.status === 503, `unconfigured provider got ${notConfigured.status}`);
+
+    // مزوّد وهمي غير مفعّل → 503 أيضاً
+    const sandboxOff = await fetch(`${BASE}/api/payments/init`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ orderId: order.order.id, provider: "sandbox" }),
+    });
+    assert(sandboxOff.status === 503, `sandbox off got ${sandboxOff.status}`);
+
+    // إشعار بتوكن مزوّر يجب ألا يُغيّر الحالة
+    const forged = await fetch(`${BASE}/api/payments/callback/sandbox?token=abc.def.ghi`, { redirect: "manual" });
+    assert(forged.status === 303, `forged callback status ${forged.status}`);
+    const loc = forged.headers.get("location") || "";
+    assert(loc.includes("status=invalid"), `forged callback not rejected: ${loc}`);
+
+    const after = await fetch(`${BASE}/api/orders/${order.order.id}`, { headers: { cookie: custCookie } }).then(j);
+    assert(after.order.paymentStatus !== "paid", "forged callback marked order paid");
+    return "503 بلا اعتماد + توقيع مزوّر مرفوض ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

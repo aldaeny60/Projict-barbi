@@ -222,7 +222,13 @@ export async function POST(req: NextRequest) {
     return Response.json({
       ok: true,
       payment: paymentStatus,
-      order: { id: order.id, code: order.code, createdAt: order.createdAt.toISOString(), status: order.status },
+      order: {
+        id: order.id,
+        code: order.code,
+        createdAt: order.createdAt.toISOString(),
+        status: order.status,
+        paymentMethod: order.paymentMethod,
+      },
       invoice: {
         code: order.code,
         customerName: order.customerName,

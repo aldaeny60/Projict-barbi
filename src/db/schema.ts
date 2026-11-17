@@ -174,6 +174,8 @@ export const orders = pgTable(
     address: text("address"),
     notes: text("notes"),
     paymentMethod: varchar("payment_method", { length: 40 }).notNull().default("cod"),
+    /** حالة الدفع الإلكتروني: unpaid | pending | paid | failed | refunded */
+    paymentStatus: varchar("payment_status", { length: 16 }).notNull().default("unpaid"),
     payments: jsonb("payments").$type<OrderPayment[]>().notNull().default([]),
     subtotal: integer("subtotal").notNull(),
     discountTotal: integer("discount_total").notNull().default(0),
@@ -441,3 +443,30 @@ export const apiKeys = pgTable("api_keys", {
 });
 
 export type ApiKeyRow = typeof apiKeys.$inferSelect;
+
+/* ───────────────────────── الدفع الإلكتروني ───────────────────────── */
+
+/**
+ * محاولات الدفع لكل طلب — مصدر الحقيقة لحالة الدفع.
+ * `requestKey` فريد ليمنع معالجة نفس الإشعار (webhook) مرتين.
+ */
+export const payments = pgTable(
+  "payments",
+  {
+    id: serial("id").primaryKey(),
+    orderId: integer("order_id")
+      .references(() => orders.id, { onDelete: "cascade" })
+      .notNull(),
+    provider: varchar("provider", { length: 32 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("pending"),
+    amount: integer("amount").notNull(),
+    providerRef: varchar("provider_ref", { length: 120 }),
+    requestKey: varchar("request_key", { length: 120 }).unique(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("payments_order_idx").on(t.orderId), index("payments_status_idx").on(t.status)]
+);
+
+export type PaymentRow = typeof payments.$inferSelect;
