@@ -1158,6 +1158,68 @@ async function run() {
     return `/${p.slug} + canonical + breadcrumb ✓`;
   });
 
+  // 60) المطابقة اليدوية للدفع: للمالك فقط، بسبب إلزامي، ومنسوبة في سجل الطلب
+  await test("مطابقة الدفع يدوياً (للمالك فقط)", async () => {
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const p = all.products.find((x) => (x.sizeStock ?? []).some((s) => s.stock >= 1));
+    assert(p, "no stock");
+    const sz = (p.sizeStock ?? []).find((s) => s.stock >= 1).size;
+    const created = await fetch(`${BASE}/api/orders`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        customerName: "QA reconcile",
+        phone: QA_PHONE,
+        governorate: "بغداد",
+        address: "QA reconcile",
+        paymentMethod: "zaincash",
+        items: [{ productId: p.id, qty: 1, size: sz, color: p.colors[0]?.name }],
+      }),
+    }).then(j);
+    assert(created.ok, JSON.stringify(created));
+
+    const anon = await fetch(`${BASE}/api/admin/payments`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ orderId: created.order.id, status: "paid", note: "محاولة بلا جلسة" }),
+    });
+    assert(anon.status === 401, `anon reconcile got ${anon.status}`);
+
+    const noNote = await fetch(`${BASE}/api/admin/payments`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ orderId: created.order.id, status: "paid" }),
+    });
+    assert(noNote.status === 400, `missing note got ${noNote.status}`);
+
+    const ok = await fetch(`${BASE}/api/admin/payments`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({
+        orderId: created.order.id,
+        status: "paid",
+        note: "وصل مبلغ زين كاش ولا يصل إشعار",
+        providerRef: "QA-MANUAL-1",
+      }),
+    }).then(j);
+    assert(ok.ok && ok.order.paymentStatus === "paid", JSON.stringify(ok));
+
+    const detail = await fetch(`${BASE}/api/orders/${created.order.id}`, { headers: { cookie: adminCookie } }).then(j);
+    assert(detail.order.paymentStatus === "paid", "order paymentStatus not updated");
+    assert(
+      detail.order.events.some((e) => (e.note ?? "").includes("مطابقة دفع يدوية")),
+      "manual reconciliation not recorded in order events"
+    );
+
+    const again = await fetch(`${BASE}/api/admin/payments`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ orderId: created.order.id, status: "paid", note: "تكرار المطابقة" }),
+    });
+    assert(again.status === 409, `repeat reconcile got ${again.status}`);
+    return "401 بلا جلسة • 400 بلا سبب • مدفوع + سجل + 409 للتكرار ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

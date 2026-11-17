@@ -767,6 +767,9 @@ function OrdersTab() {
                   <div className="text-[11px] font-bold text-ink-soft">
                     {o.governorate && <span>{o.governorate}{o.district ? ` — ${o.district}` : ""} • </span>}
                     الدفع: {gatewayById(o.paymentMethod).name} {o.couponCode && `• كوبون ${o.couponCode}`}
+                    {o.paymentStatus === "paid" && <span className="text-minty-600"> • مدفوع</span>}
+                    {o.paymentStatus === "pending" && <span className="text-butter-700"> • بانتظار الدفع</span>}
+                    {o.paymentStatus === "failed" && <span className="text-blush-600"> • فشل الدفع</span>}
                     {o.refundTotal ? <span className="text-blush-600"> • مسترد {formatIQD(o.refundTotal)}</span> : null}
                   </div>
                   <div className="flex items-center gap-2">

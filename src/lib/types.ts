@@ -88,6 +88,8 @@ export type OrderDTO = {
   total: number;
   branchId: number | null;
   staffName: string | null;
+  /** حالة الدفع الإلكتروني (unpaid افتراضياً) */
+  paymentStatus?: string;
   createdAt: string;
   items: OrderItemDTO[];
   events?: OrderEventDTO[];

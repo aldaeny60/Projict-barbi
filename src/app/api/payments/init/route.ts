@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import type { NextRequest } from "next/server";
 import { ipOf, logAudit } from "@/lib/audit";
+import { env } from "@/lib/env";
 import { initPayment, providerConfigured, type ProviderId } from "@/lib/payment-gateway";
 import { checkRateLimit, clientKey, rateLimited } from "@/lib/rate-limit";
 import { customerFromRequest, isSameOrigin } from "@/lib/session";
@@ -53,8 +54,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "هذا الطلب ليس لك" }, { status: 403 });
   }
 
-  const publicBase =
-    process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, "") || req.nextUrl.origin;
+  const publicBase = env.publicBaseUrl || req.nextUrl.origin;
 
   const requestKey = `pay-${order.code}-${randomUUID()}`;
   try {

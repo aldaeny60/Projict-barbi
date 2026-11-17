@@ -50,6 +50,8 @@ export const env = {
   /** وضع العرض: قاعدة مؤقتة داخل الحاوية وبيانات توضيحية */
   demoMode: process.env.DEMO_MODE === "1",
   databaseUrl: read("DATABASE_URL"),
+  /** العنوان العام — يُستخدم في روابط الدفع وsitemap */
+  publicBaseUrl: read("NEXT_PUBLIC_BASE_URL").replace(/\/+$/, ""),
 
   adminPin: read("ADMIN_PIN", "2024"),
   adminPinIsDefault: !read("ADMIN_PIN"),
