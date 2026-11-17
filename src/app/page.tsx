@@ -4,13 +4,14 @@ import { desc, eq, isNotNull } from "drizzle-orm";
 import { toProductDTO } from "@/lib/dto";
 import { HomeClient } from "@/components/HomeClient";
 import { AutoSeed } from "@/components/AutoSeed";
+import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const cats = await db.select().from(categories);
   if (cats.length === 0) {
-    return <AutoSeed />;
+    return <AutoSeed demo={env.demoMode} />;
   }
   const catById = new Map(cats.map((c) => [c.id, c]));
 

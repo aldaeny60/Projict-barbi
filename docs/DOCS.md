@@ -42,7 +42,7 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 | POST/PATCH/DELETE | `/api/products`, `/api/products/[id]` | إدارة المنتجات (إدارة) |
 | GET/POST | `/api/categories` | التصنيفات |
 | GET | `/api/search?q=` | اقتراحات البحث الفوري |
-| POST | `/api/reviews` | `{productId, author, rating, comment}` |
+| POST | `/api/reviews` | تقييم منتج — يتطلب جلسة OTP **وطلباً مُسلَّماً يحتوي المنتج** (403 خلاف ذلك). تقييم واحد لكل زبون/منتج: الإعادة تُحدّث النص والنجوم بدل التكرار |
 
 ### الطلبات (ويب)
 | Method | Path | الوصف |

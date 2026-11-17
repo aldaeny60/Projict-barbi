@@ -849,18 +849,22 @@ async function run() {
 
   // 52) البحث العربي يتجاوز اختلاف الهمزة والتاء المربوطة
   await test("البحث العربي المتسامح (همزات/تاء مربوطة)", async () => {
-    const withHamza = await fetch(`${BASE}/api/products?q=${encodeURIComponent("أطفال")}&limit=100`).then(j);
-    const plain = await fetch(`${BASE}/api/products?q=${encodeURIComponent("اطفال")}&limit=100`).then(j);
-    assert(plain.products.length > 0, "plain spelling found nothing");
-    assert(withHamza.products.length > 0, "hamza spelling found nothing");
-    assert(
-      plain.products.length === withHamza.products.length,
-      `variants differ: ${plain.products.length} vs ${withHamza.products.length}`
-    );
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const target = all.products.find((p) => /[أإآةى]/.test(p.name));
+    assert(target, "no product name with hamza/ta-marbuta to test");
+    const word = target.name.split(/\s+/).find((w) => /[أإآةى]/.test(w)) ?? target.name;
+    const plainWord = word.replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
+    assert(plainWord !== word, `word has no variant: ${word}`);
 
-    const taMarbuta = await fetch(`${BASE}/api/search?q=${encodeURIComponent("فساتين")}`).then(j);
-    assert(Array.isArray(taMarbuta.suggestions), "search suggestions missing");
-    return `${plain.products.length} نتيجة بالصيغتين ✓`;
+    const withOriginal = await fetch(`${BASE}/api/products?q=${encodeURIComponent(word)}&limit=100`).then(j);
+    const withPlain = await fetch(`${BASE}/api/products?q=${encodeURIComponent(plainWord)}&limit=100`).then(j);
+    assert(withOriginal.products.some((p) => p.id === target.id), `original spelling missed ${word}`);
+    assert(withPlain.products.some((p) => p.id === target.id), `plain spelling missed ${plainWord}`);
+    assert(
+      withPlain.products.length === withOriginal.products.length,
+      `variants differ: ${withOriginal.products.length} vs ${withPlain.products.length}`
+    );
+    return `«${word}» = «${plainWord}» → ${withPlain.products.length} نتيجة ✓`;
   });
 
   // 53) التقييم: بعد استلام الطلب فقط، وباسم الحساب، ومرة واحدة لكل زبون
