@@ -800,6 +800,19 @@ async function run() {
     return `${o.events.length} حدث ✓`;
   });
 
+  // 50) سجل الحالات متاح للتتبع: كامل للجلسة، مخفّف برقم الطلب
+  await test("سجل حالات الطلب في التتبع", async () => {
+    const mine = await fetch(`${BASE}/api/track`, { headers: { cookie: custCookie } }).then(j);
+    const withEvents = (mine.orders ?? []).find((o) => Array.isArray(o.events) && o.events.length);
+    assert(withEvents, "no events for verified tracking");
+
+    const pub = await fetch(`${BASE}/api/track?phone=${QA_PHONE}&code=${orderCode}`).then(j);
+    const o = pub.orders?.[0];
+    assert(o && Array.isArray(o.history) && o.history.length > 0, "no public history");
+    assert(!("total" in o) && !("customerName" in o), "public history leaked private fields");
+    return `${withEvents.events.length} حدث موثّق • ${o.history.length} مخفّف ✓`;
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

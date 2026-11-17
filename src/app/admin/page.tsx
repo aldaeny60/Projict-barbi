@@ -338,7 +338,7 @@ function ProductsTab() {
     fetch("/api/categories").then((r) => r.json()).then((d) => setCats(d.categories ?? [])).catch(() => {});
   }, [load]);
 
-  const filtered = (items ?? []).filter((p) => !q || p.name.includes(q));
+  const filtered = (items ?? []).filter((p) => !q || p.name.includes(q) || (p.barcode ?? "").includes(q));
 
   const openNew = () => {
     const sizes = [...SIZES_ALL.slice(2, 8)];
@@ -428,7 +428,7 @@ function ProductsTab() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-52">
           <Search size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-faint" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث بالاسم..." className="field pr-10 py-2.5 text-sm" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث بالاسم أو الباركود..." className="field pr-10 py-2.5 text-sm" />
         </div>
         <button onClick={openNew} className="flex items-center gap-1.5 rounded-2xl bg-ink px-4 py-2.5 text-xs font-black text-white transition-transform hover:scale-105">
           <Plus size={14} /> منتج جديد

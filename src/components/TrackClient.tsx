@@ -269,25 +269,28 @@ function OrderTrackCard({
         </div>
       )}
 
-      <div className="space-y-2 px-5 py-4">
-        {(() => {
-          const timeline = (o.events ?? o.history ?? []).slice(-6);
-          if (!timeline.length) return null;
-          return (
-            <div className="mb-2 rounded-2xl bg-paper/70 p-3">
-              <p className="mb-2 text-[10px] font-black text-ink-soft">سجل الطلب</p>
-              <div className="space-y-1.5">
-                {timeline.map((e, i) => (
-                  <div key={`${e.toStatus}-${i}`} className="flex items-center gap-2 text-[10px] font-bold text-ink-soft">
-                    <span className="size-1.5 shrink-0 rounded-full bg-lilac-400" />
+      {(() => {
+        const timeline = o.events ?? o.history ?? [];
+        if (!timeline.length) return null;
+        return (
+          <div className="mx-5 mt-3 rounded-2xl bg-paper/70 p-3">
+            <p className="mb-1.5 text-[10px] font-black text-ink-soft">سجل الطلب</p>
+            <div className="space-y-1">
+              {timeline.slice(-5).reverse().map((e, i) => (
+                <div key={`${e.toStatus}-${i}`} className="flex items-center justify-between text-[10px] font-bold text-ink-soft">
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-1.5 rounded-full bg-lilac-400" />
                     <span className="text-ink">{ORDER_STATUS_META[e.toStatus]?.label ?? e.toStatus}</span>
-                    <span>• {fmtDateTime(e.createdAt)}</span>
-                  </div>
-                ))}
-              </div>
+                  </span>
+                  <span>{fmtDateTime(e.createdAt)}</span>
+                </div>
+              ))}
             </div>
-          );
-        })()}
+          </div>
+        );
+      })()}
+
+      <div className="space-y-2 px-5 py-4">
         {items.length > 0
           ? items.map((it) => (
               <div key={it.id} className="flex items-center gap-3">
