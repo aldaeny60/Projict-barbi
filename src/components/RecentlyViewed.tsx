@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Clock } from "lucide-react";
 import { formatIQD } from "@/lib/format";
 
-type Viewed = { id: number; name: string; price: number; image: string };
+type Viewed = { id: number; slug: string; name: string; price: number; image: string };
 
 const KEY = "barbi_viewed_v1";
 const MAX = 8;
@@ -24,7 +24,11 @@ export function RecentlyViewed({ current }: { current: Viewed }) {
       if (Array.isArray(raw)) {
         prev = raw.filter(
           (x): x is Viewed =>
-            Boolean(x) && typeof x.id === "number" && typeof x.name === "string" && typeof x.price === "number"
+            Boolean(x) &&
+            typeof x.id === "number" &&
+            typeof x.slug === "string" &&
+            typeof x.name === "string" &&
+            typeof x.price === "number"
         );
       }
     } catch {
@@ -48,7 +52,7 @@ export function RecentlyViewed({ current }: { current: Viewed }) {
       </h2>
       <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
         {items.map((p) => (
-          <Link key={p.id} href={`/product/${p.id}`} className="w-32 shrink-0">
+          <Link key={p.id} href={`/product/${p.slug || p.id}`} className="w-32 shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={p.image} alt={p.name} loading="lazy" className="aspect-[3/4] w-full rounded-2xl object-cover shadow-soft" />
             <p className="mt-1.5 line-clamp-1 text-[11px] font-black">{p.name}</p>

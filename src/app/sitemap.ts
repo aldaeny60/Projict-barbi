@@ -10,9 +10,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let productUrls: MetadataRoute.Sitemap = [];
   let categoryUrls: MetadataRoute.Sitemap = [];
   try {
-    const rows = await db.select({ id: products.id, createdAt: products.createdAt }).from(products);
+    const rows = await db
+      .select({ id: products.id, slug: products.slug, createdAt: products.createdAt })
+      .from(products);
     productUrls = rows.map((p) => ({
-      url: `${base}/product/${p.id}`,
+      url: `${base}/product/${p.slug || p.id}`,
       lastModified: p.createdAt,
       changeFrequency: "weekly",
       priority: 0.8,

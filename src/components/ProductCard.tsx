@@ -57,7 +57,7 @@ export function ProductCard({ p, index = 0 }: { p: ProductDTO; index?: number })
       transition={{ duration: 0.5, delay: Math.min(index * 0.05, 0.3), ease: [0.22, 1, 0.36, 1] }}
     >
       <Link
-        href={`/product/${p.id}`}
+        href={`/product/${p.slug || p.id}`}
         className="group block"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { getProductDetail } from "@/lib/server-queries";
 import { ProductView } from "@/components/ProductView";
+import { SITE } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -11,13 +12,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const data = await getProductDetail(id);
   if (!data) return { title: "منتج غير موجود" };
+  const canonical = `/product/${data.product.slug}`;
   return {
     title: data.product.name,
     description: data.product.description.slice(0, 160),
+    alternates: { canonical },
     openGraph: {
       title: data.product.name,
       description: data.product.description.slice(0, 120),
       locale: "ar_IQ",
+      url: canonical,
       images: data.product.images.slice(0, 1),
     },
   };
@@ -40,6 +44,7 @@ export default async function ProductPage({ params }: Props) {
     );
   }
   const { product, similar, reviews } = data;
+  const productUrl = `${SITE.baseUrl.replace(/\/+$/, "")}/product/${product.slug}`;
   return (
     <>
       <script
@@ -51,18 +56,42 @@ export default async function ProductPage({ params }: Props) {
             name: product.name,
             description: product.description,
             image: product.images,
+            sku: product.barcode ?? undefined,
             brand: { "@type": "Brand", name: "باربي" },
             offers: {
               "@type": "Offer",
+              url: productUrl,
               priceCurrency: "IQD",
               price: product.price,
               availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
             },
-            aggregateRating: {
-              "@type": "AggregateRating",
-              ratingValue: product.rating,
-              reviewCount: product.reviewsCount,
-            },
+            aggregateRating:
+              product.reviewsCount > 0
+                ? {
+                    "@type": "AggregateRating",
+                    ratingValue: product.rating,
+                    reviewCount: product.reviewsCount,
+                  }
+                : undefined,
+          }),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE.baseUrl.replace(/\/+$/, "") },
+              {
+                "@type": "ListItem",
+                position: 2,
+                name: product.categoryName || "المتجر",
+                item: `${SITE.baseUrl.replace(/\/+$/, "")}/shop?category=${product.categorySlug}`,
+              },
+              { "@type": "ListItem", position: 3, name: product.name, item: productUrl },
+            ],
           }),
         }}
       />

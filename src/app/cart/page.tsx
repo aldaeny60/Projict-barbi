@@ -131,7 +131,7 @@ export default function CartPage() {
                   <img src={l.image} alt={l.name} className="size-24 shrink-0 rounded-2xl object-cover md:size-28" />
                   <div className="flex flex-1 flex-col">
                     <div className="flex items-start justify-between gap-2">
-                      <Link href={`/product/${l.productId}`} className="line-clamp-2 text-sm font-black leading-snug hover:text-blush-600">
+                      <Link href={`/product/${l.slug || l.productId}`} className="line-clamp-2 text-sm font-black leading-snug hover:text-blush-600">
                         {l.name}
                       </Link>
                       <button onClick={() => { remove(key); toast("انحذف من السلة"); }} className="grid size-8 shrink-0 place-items-center rounded-full bg-blush-50 text-blush-600 transition-transform hover:scale-110" aria-label="حذف">

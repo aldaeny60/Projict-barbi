@@ -156,7 +156,7 @@ export function Header() {
                     sugs.map((s) => (
                       <Link
                         key={s.id}
-                        href={`/product/${s.id}`}
+                        href={`/product/${s.slug || s.id}`}
                         onClick={() => setOpenSugs(false)}
                         className="flex items-center gap-3 border-b border-paper px-4 py-2.5 transition-colors last:border-0 hover:bg-blush-50"
                       >
@@ -278,7 +278,7 @@ export function Header() {
                 {sugs.map((s) => (
                   <Link
                     key={s.id}
-                    href={`/product/${s.id}`}
+                    href={`/product/${s.slug || s.id}`}
                     onClick={() => setOpenSugs(false)}
                     className="flex items-center gap-3 border-b border-paper px-4 py-2.5 last:border-0"
                   >

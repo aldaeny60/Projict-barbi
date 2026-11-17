@@ -451,7 +451,7 @@ export function ProductView({
         </div>
       </div>
 
-      <RecentlyViewed current={{ id: p.id, name: p.name, price: p.price, image: p.images[0] ?? "" }} />
+      <RecentlyViewed current={{ id: p.id, slug: p.slug, name: p.name, price: p.price, image: p.images[0] ?? "" }} />
     </div>
   );
 }

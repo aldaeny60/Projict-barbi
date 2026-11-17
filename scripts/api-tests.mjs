@@ -1141,6 +1141,23 @@ async function run() {
     return "بدء + رمز خاطئ 400 + تفعيل + دخول بالرمز + تصفير ✓";
   });
 
+  // 59) روابط المنتجات بالـslug: الصفحة والميتا تعملان بالرابط الدلالي
+  await test("روابط المنتجات الدلالية (slug)", async () => {
+    const all = await fetch(`${BASE}/api/products?limit=5`).then(j);
+    const p = all.products.find((x) => x.slug);
+    assert(p, "no slugged product");
+    const r = await fetch(`${BASE}/product/${p.slug}`);
+    assert(r.status === 200, `slug page ${r.status}`);
+    const html = await r.text();
+    assert(html.includes(`/product/${p.slug}`), "canonical/slug link missing in HTML");
+    assert(html.includes("BreadcrumbList"), "breadcrumb structured data missing");
+    const byId = await fetch(`${BASE}/product/${p.id}`);
+    assert(byId.status === 200, "id link stopped working");
+    const sitemap = await (await fetch(`${BASE}/sitemap.xml`)).text();
+    assert(sitemap.includes(`/product/${p.slug}`), "sitemap lacks slug URL");
+    return `/${p.slug} + canonical + breadcrumb ✓`;
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");
