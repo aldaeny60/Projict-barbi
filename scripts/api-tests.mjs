@@ -849,22 +849,42 @@ async function run() {
 
   // 52) البحث العربي يتجاوز اختلاف الهمزة والتاء المربوطة
   await test("البحث العربي المتسامح (همزات/تاء مربوطة)", async () => {
-    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
-    const target = all.products.find((p) => /[أإآةى]/.test(p.name));
-    assert(target, "no product name with hamza/ta-marbuta to test");
-    const word = target.name.split(/\s+/).find((w) => /[أإآةى]/.test(w)) ?? target.name;
-    const plainWord = word.replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي");
-    assert(plainWord !== word, `word has no variant: ${word}`);
+    const cats = await fetch(`${BASE}/api/categories`).then(j);
+    const cat = (cats.categories ?? [])[0];
+    assert(cat, "no categories");
 
-    const withOriginal = await fetch(`${BASE}/api/products?q=${encodeURIComponent(word)}&limit=100`).then(j);
-    const withPlain = await fetch(`${BASE}/api/products?q=${encodeURIComponent(plainWord)}&limit=100`).then(j);
-    assert(withOriginal.products.some((p) => p.id === target.id), `original spelling missed ${word}`);
-    assert(withPlain.products.some((p) => p.id === target.id), `plain spelling missed ${plainWord}`);
-    assert(
-      withPlain.products.length === withOriginal.products.length,
-      `variants differ: ${withOriginal.products.length} vs ${withPlain.products.length}`
-    );
-    return `«${word}» = «${plainWord}» → ${withPlain.products.length} نتيجة ✓`;
+    // منتج اختبار معروف الاسم — لا نعتمد على أسماء البذر
+    const created = await fetch(`${BASE}/api/products`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({
+        name: "فستان أطفال تجريبي للبحث",
+        description: "قطعة اختبار للتحقق من تطبيع الهمزات",
+        price: 12345,
+        stock: 3,
+        categoryId: cat.id,
+        sizes: ["2-3 سنوات"],
+        colors: [{ name: "وردي", hex: "#F4A9C6" }],
+      }),
+    }).then(j);
+    assert(created.product?.id, JSON.stringify(created));
+
+    try {
+      const withHamza = await fetch(`${BASE}/api/products?q=${encodeURIComponent("أطفال")}&limit=100`).then(j);
+      const plain = await fetch(`${BASE}/api/products?q=${encodeURIComponent("اطفال")}&limit=100`).then(j);
+      assert(withHamza.products.some((p) => p.id === created.product.id), "hamza spelling missed the product");
+      assert(plain.products.some((p) => p.id === created.product.id), "plain spelling missed the product");
+      assert(
+        plain.products.length === withHamza.products.length,
+        `variants differ: ${withHamza.products.length} vs ${plain.products.length}`
+      );
+
+      const suggest = await fetch(`${BASE}/api/search?q=${encodeURIComponent("اطفال")}`).then(j);
+      assert(Array.isArray(suggest.suggestions), "suggestions missing");
+      return `«أطفال» = «اطفال» → ${plain.products.length} نتيجة ✓`;
+    } finally {
+      await fetch(`${BASE}/api/products/${created.product.id}`, { method: "DELETE", headers: { cookie: adminCookie } });
+    }
   });
 
   // 53) التقييم: بعد استلام الطلب فقط، وباسم الحساب، ومرة واحدة لكل زبون
