@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       description: c.description,
       active: c.active,
       expiresAt: c.expiresAt?.toISOString() ?? null,
-      ...(admin ? { maxUses: c.maxUses, usedCount: c.usedCount } : {}),
+      ...(admin ? { maxUses: c.maxUses, usedCount: c.usedCount, oncePerCustomer: c.oncePerCustomer } : {}),
     })),
   });
 }
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
         active: true,
         expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
         maxUses,
+        oncePerCustomer: Boolean(body.oncePerCustomer),
       })
       .returning();
     await logAudit(adminActor(req), "coupon.create", `coupon:${row.id}`, {
@@ -80,11 +81,13 @@ export async function PATCH(req: NextRequest) {
     id?: number;
     active?: boolean;
     maxUses?: number | null;
+    oncePerCustomer?: boolean;
   };
   const id = Number(body.id);
   if (!id) return Response.json({ error: "معرّف مطلوب" }, { status: 400 });
   const patch: Partial<typeof coupons.$inferInsert> = {};
   if (body.active !== undefined) patch.active = Boolean(body.active);
+  if (body.oncePerCustomer !== undefined) patch.oncePerCustomer = Boolean(body.oncePerCustomer);
   if (body.maxUses !== undefined) {
     patch.maxUses = body.maxUses === null ? null : Math.max(1, Math.round(Number(body.maxUses)));
   }

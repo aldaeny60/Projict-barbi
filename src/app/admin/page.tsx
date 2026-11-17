@@ -787,7 +787,7 @@ function OrdersTab() {
 /* ═══ coupons ═══ */
 function CouponsTab() {
   const [coupons, setCoupons] = useState<CouponDTO[] | null>(null);
-  const [form, setForm] = useState({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "" });
+  const [form, setForm] = useState({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "", oncePerCustomer: false });
   const load = useCallback(() => fetch("/api/coupons").then((r) => r.json()).then((d) => setCoupons(d.coupons ?? [])).catch(() => setCoupons([])), []);
   useEffect(() => { load(); }, [load]);
 
@@ -805,6 +805,7 @@ function CouponsTab() {
                 </p>
                 <p className="text-[10px] font-bold text-ink-faint">
                   الاستخدام: {formatNum(c.usedCount ?? 0)} / {c.maxUses ?? "∞"}
+                  {c.oncePerCustomer ? " • مرة واحدة لكل زبون" : ""}
                 </p>
               </div>
             </div>
@@ -851,10 +852,17 @@ function CouponsTab() {
           <input value={form.minSubtotal} onChange={(e) => setForm({ ...form, minSubtotal: e.target.value.replace(/[^\d]/g, "") })} placeholder="الحد الأدنى للطلب (د.ع)" className="field text-sm" dir="ltr" inputMode="numeric" />
           <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="وصف قصير" className="field text-sm" />
           <input value={form.maxUses} onChange={(e) => setForm({ ...form, maxUses: e.target.value.replace(/[^\d]/g, "") })} placeholder="حد الاستخدام — فارغ = بلا حد" className="field text-sm" dir="ltr" inputMode="numeric" />
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, oncePerCustomer: !form.oncePerCustomer })}
+            className={`flex w-full items-center justify-between rounded-2xl p-3 text-xs font-black ${form.oncePerCustomer ? "bg-minty-100 text-minty-700" : "bg-paper text-ink-soft ring-1 ring-ink/10"}`}
+          >
+            مرة واحدة لكل زبون {form.oncePerCustomer ? <Check size={14} /> : <span />}
+          </button>
           <button onClick={async () => {
             if (!form.code || !form.value) return;
             await fetch("/api/coupons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, value: Number(form.value), minSubtotal: Number(form.minSubtotal) || 0 }) });
-            setForm({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "" });
+            setForm({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "", oncePerCustomer: false });
             load();
           }} className="w-full rounded-2xl bg-ink py-3 text-sm font-black text-white transition-transform hover:scale-[1.02]">إنشاء</button>
         </div>

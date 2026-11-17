@@ -1,8 +1,12 @@
 import { db } from "@/db";
 import { coupons, deliveryFees, orders } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
-export async function getCouponDiscount(code: string | null | undefined, subtotal: number) {
+export async function getCouponDiscount(
+  code: string | null | undefined,
+  subtotal: number,
+  opts?: { phone?: string | null }
+) {
   if (!code) return { discount: 0, coupon: null, reason: null as string | null };
   const [c] = await db.select().from(coupons).where(eq(coupons.code, code.toUpperCase())).limit(1);
   if (!c || !c.active) return { discount: 0, coupon: null, reason: "كود الخصم غير موجود أو غير مفعّل" };
@@ -12,6 +16,24 @@ export async function getCouponDiscount(code: string | null | undefined, subtota
     return { discount: 0, coupon: null, reason: "انتهى عدد استخدامات هذا الكود" };
   if (subtotal < c.minSubtotal)
     return { discount: 0, coupon: null, reason: "الطلب أقل من الحد الأدنى للكود" };
+
+  // مرة واحدة لكل زبون: نفحص طلباته السابقة بنفس الكود
+  if (c.oncePerCustomer && opts?.phone) {
+    const [{ n }] = await db
+      .select({ n: sql<number>`count(*)` })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.phone, opts.phone),
+          eq(orders.couponCode, c.code),
+          sql`${orders.status} not in ('cancelled','returned')`
+        )
+      );
+    if (Number(n) > 0) {
+      return { discount: 0, coupon: null, reason: "هذا الكود يُستخدم مرة واحدة لكل زبون" };
+    }
+  }
+
   const discount = c.type === "percent" ? Math.round((subtotal * c.value) / 100) : c.value;
   return { discount: Math.min(discount, subtotal), coupon: c, reason: null as string | null };
 }

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 /** تحقق من كود خصم — يستخدم نفس منطق الخادم عند إنشاء الطلب (حد استخدام + انتهاء) */
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as { code?: string; subtotal?: number };
+  const body = (await req.json().catch(() => ({}))) as { code?: string; subtotal?: number; phone?: string };
   const code = (body.code ?? "").trim().toUpperCase();
   const subtotal = Math.round(Number(body.subtotal ?? 0));
   if (!code) return Response.json({ valid: false, message: "أدخل كود الخصم" });
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const [c] = await db.select().from(coupons).where(eq(coupons.code, code)).limit(1);
   if (!c) return Response.json({ valid: false, message: "كود الخصم غير موجود" });
 
-  const { discount, reason } = await getCouponDiscount(code, subtotal);
+  const { discount, reason } = await getCouponDiscount(code, subtotal, { phone: body.phone ?? null });
   if (!discount) {
     const message =
       reason === "الطلب أقل من الحد الأدنى للكود"

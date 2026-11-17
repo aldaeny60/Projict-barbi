@@ -29,6 +29,11 @@ export async function sendSms(to: string, text: string): Promise<"sent" | "skipp
   }
 }
 
+/** إشعار الزبون عند تغيّر حالة طلبه — يُرسل فعلاً عند تهيئة المزود فقط */
+export async function notifyStatusChange(phone: string, code: string, statusLabel: string) {
+  return sendSms(phone, `باربي: طلبك ${code} — الحالة الآن: ${statusLabel}. شكراً لثقتك بنا.`);
+}
+
 export async function sendOrderNotifications(input: {
   phone: string;
   customerName: string;

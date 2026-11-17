@@ -106,6 +106,8 @@ export type CouponDTO = {
   /** تظهر للإدارة فقط — null يعني بلا حد */
   maxUses?: number | null;
   usedCount?: number;
+  /** مرة واحدة لكل زبون — تظهر للإدارة فقط */
+  oncePerCustomer?: boolean;
 };
 
 export type DeliveryFeeDTO = {

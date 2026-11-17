@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     if (!lines.length) return Response.json({ error: "المنتجات غير متوفرة" }, { status: 400 });
 
     const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
-    const coupon = await getCouponDiscount(couponCode ?? null, subtotal);
+    const coupon = await getCouponDiscount(couponCode ?? null, subtotal, { phone });
     const discount = coupon.discount;
     const deliveryFee = await computeDeliveryFee(governorate);
     const total = subtotal - discount + deliveryFee;

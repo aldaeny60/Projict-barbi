@@ -14,6 +14,8 @@ import type { NextRequest } from "next/server";
 import { isAdminAuthed } from "@/lib/admin-auth";
 import { ipOf, logAudit, type AuditActor } from "@/lib/audit";
 import { ORDER_STATUS_META, nextStatuses } from "@/lib/data";
+import { isValidIraqiPhone } from "@/lib/format";
+import { notifyStatusChange } from "@/lib/notify";
 import { checkRateLimit, clientKey, rateLimited } from "@/lib/rate-limit";
 import { customerFromRequest, isSameOrigin, staffFromRequest } from "@/lib/session";
 
@@ -26,7 +28,7 @@ const CUSTOMER_OWNED = new Set(["cancelled", "return_requested"]);
 const TERMINAL = ["cancelled", "returned"];
 
 type TxResult =
-  | { row: typeof orders.$inferSelect; prevStatus: string }
+  | { row: typeof orders.$inferSelect; prevStatus: string; phone: string; code: string }
   | { error: string; code: 403 | 404 | 409 };
 
 const label = (status: string | null) =>
@@ -144,7 +146,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       note: null,
     });
 
-    return { row, prevStatus: prev.status };
+    return { row, prevStatus: prev.status, phone: prev.phone, code: prev.code };
   });
 
   if ("error" in result) return Response.json({ error: result.error }, { status: result.code });
@@ -154,7 +156,16 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     to: nextStatus,
   });
 
-  return Response.json({ ok: true, order: { id: result.row.id, status: result.row.status } });
+  // إشعار الزبون (SMS عند تهيئة مزود؛ وإلا "skipped" بصراحة)
+  const notified = isValidIraqiPhone(result.phone)
+    ? await notifyStatusChange(result.phone, result.code, label(nextStatus))
+    : "skipped";
+
+  return Response.json({
+    ok: true,
+    notified,
+    order: { id: result.row.id, status: result.row.status },
+  });
 }
 
 /**

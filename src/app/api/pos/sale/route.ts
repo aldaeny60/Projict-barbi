@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
         : Math.round(Number(manual.value))
       : 0;
     const afterManual = Math.max(0, subtotal - Math.min(manualDiscount, subtotal));
-    const coupon = await getCouponDiscount(body.couponCode ?? null, afterManual);
+    const coupon = await getCouponDiscount(body.couponCode ?? null, afterManual, { phone: body.phone ?? null });
     const couponDiscount = coupon.discount;
     const discountTotal = Math.min(manualDiscount + couponDiscount, subtotal);
     const total = subtotal - discountTotal;

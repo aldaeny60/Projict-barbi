@@ -697,6 +697,74 @@ async function run() {
     return `ربح ${st.cards.profit.toLocaleString("en-US")} د.ع — هامش ${st.cards.marginPct}%`;
   });
 
+  // 47) تغيير الحالة يُرجع نتيجة إشعار الزبون صريحة
+  await test("إشعار الزبون عند تغيير الحالة", async () => {
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const p = all.products.find((x) => x.stock >= 2);
+    assert(p, "no stock");
+    const created = await fetch(`${BASE}/api/orders`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        customerName: "QA notify",
+        phone: QA_PHONE,
+        governorate: "بغداد",
+        address: "QA notify",
+        items: [{ productId: p.id, qty: 1, size: p.sizes[0], color: p.colors[0]?.name }],
+      }),
+    }).then(j);
+    assert(created.ok, JSON.stringify(created));
+    const r = await fetch(`${BASE}/api/orders/${created.order.id}`, {
+      method: "PATCH",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ status: "processing" }),
+    }).then(j);
+    assert(r.ok, JSON.stringify(r));
+    assert(["sent", "skipped", "failed"].includes(r.notified), `notified=${r.notified}`);
+    return `notified=${r.notified} ✓`;
+  });
+
+  // 48) كوبون «مرة واحدة لكل زبون»
+  await test("كوبون مرة واحدة لكل زبون", async () => {
+    const code = `QACUST${Date.now().toString().slice(-6)}`;
+    const created = await fetch(`${BASE}/api/coupons`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ code, type: "fixed", value: 500, oncePerCustomer: true }),
+    }).then(j);
+    assert(created.coupon?.oncePerCustomer === true, JSON.stringify(created));
+
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const p = all.products.find((x) => x.stock >= 3);
+    assert(p, "no stock for coupon test");
+    const order = () =>
+      fetch(`${BASE}/api/orders`, {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          customerName: "QA coupon",
+          phone: QA_PHONE,
+          governorate: "بغداد",
+          address: "QA coupon",
+          couponCode: code,
+          items: [{ productId: p.id, qty: 1, size: p.sizes[0], color: p.colors[0]?.name }],
+        }),
+      }).then(j);
+
+    const first = await order();
+    assert(first.ok && first.invoice.discount === 500, JSON.stringify(first.invoice));
+    const second = await order();
+    assert(second.ok && second.invoice.discount === 0, `second discount ${second.invoice.discount}`);
+
+    const v = await fetch(`${BASE}/api/coupons/validate`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ code, subtotal: 50000, phone: QA_PHONE }),
+    }).then(j);
+    assert(v.valid === false, "validate accepted a used once-per-customer coupon");
+    return "خصم أول 500 ثم 0 ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

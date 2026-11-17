@@ -219,6 +219,8 @@ export const coupons = pgTable("coupons", {
   /** null = بلا حد — وإلا يتوقف الكود بعد استهلاك العدد */
   maxUses: integer("max_uses"),
   usedCount: integer("used_count").notNull().default(0),
+  /** حد «مرة واحدة لكل زبون» — يُفحص برقم هاتف الطلب */
+  oncePerCustomer: boolean("once_per_customer").notNull().default(false),
 });
 
 export type CouponRow = typeof coupons.$inferSelect;
