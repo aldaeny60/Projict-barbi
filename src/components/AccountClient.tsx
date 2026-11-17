@@ -280,6 +280,11 @@ function OrdersTab({ orders, reload }: { orders: OrderDTO[] | null; reload: () =
               <div>
                 <p className="text-sm font-black" dir="ltr">{o.code}</p>
                 <p className="text-[11px] font-bold text-ink-faint">{fmtDateTime(o.createdAt)}</p>
+                {o.events?.length ? (
+                  <p className="text-[10px] font-bold text-lilac-600">
+                    آخر تحديث: {fmtDateTime(o.events[o.events.length - 1].createdAt)} — {ORDER_STATUS_META[o.events[o.events.length - 1].toStatus]?.label ?? o.events[o.events.length - 1].toStatus}
+                  </p>
+                ) : null}
               </div>
               <span className={`rounded-full px-3.5 py-1.5 text-xs font-black ${ORDER_STATUS_TONE[o.status]}`}>{meta.label}</span>
             </div>

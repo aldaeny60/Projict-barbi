@@ -758,9 +758,11 @@ async function run() {
       }).then(j);
 
     const first = await order();
-    assert(first.ok && first.invoice.discount === 500, JSON.stringify(first.invoice));
+    assert(first.ok && first.invoice, JSON.stringify(first).slice(0, 300));
+    assert(first.invoice.discount === 500, `first discount ${first.invoice.discount}`);
     const second = await order();
-    assert(second.ok && second.invoice.discount === 0, `second discount ${second.invoice.discount}`);
+    assert(second.ok && second.invoice, JSON.stringify(second).slice(0, 300));
+    assert(second.invoice.discount === 0, `second discount ${second.invoice.discount}`);
 
     const v = await fetch(`${BASE}/api/coupons/validate`, {
       method: "POST",
@@ -785,6 +787,17 @@ async function run() {
     const c = await fetch(`${BASE}/api/admin/export?type=customers`, { headers: { cookie: adminCookie } }).then((x) => x.text());
     assert(c.includes("الهاتف") && c.includes(QA_PHONE), "customers csv missing QA phone");
     return `${body.split("\r\n").length - 1} صف طلبات ✓`;
+  });
+
+  // 50) سجل الحالات يظهر في التتبع (موثّق ومخفي)
+  await test("سجل الحالات في صفحة التتبع", async () => {
+    const r = await fetch(`${BASE}/api/track`, { headers: { cookie: custCookie } }).then(j);
+    const o = (r.orders ?? [])[0];
+    assert(o && Array.isArray(o.events) && o.events.length > 0, "no events for verified tracking");
+    assert(orderCode, "no order code captured");
+    const pub = await fetch(`${BASE}/api/track?phone=${QA_PHONE}&code=${orderCode}`).then(j);
+    assert(Array.isArray(pub.orders?.[0]?.history), "public history missing");
+    return `${o.events.length} حدث ✓`;
   });
 
   // ── النتائج ──

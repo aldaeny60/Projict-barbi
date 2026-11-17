@@ -53,7 +53,8 @@ async function duplicateResponse(order: OrderRow) {
  * requestId (idempotency): نفس المفتاح مرتين لا يُنشئ طلبين ولا يخصم المخزون مرتين.
  */
 export async function POST(req: NextRequest) {
-  const rl = checkRateLimit(clientKey(req, "orders"), 10, 60_000);
+  // حد مرن للعائلة/الشبكة المشتركة — يبقى حاجزاً أمام الإغراق
+  const rl = checkRateLimit(clientKey(req, "orders"), 30, 60_000);
   if (!rl.allowed) return rateLimited(rl.retryAfterSec);
   if (!isSameOrigin(req)) return Response.json({ error: "طلب غير موثوق" }, { status: 403 });
   try {
