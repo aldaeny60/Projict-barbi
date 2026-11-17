@@ -109,13 +109,14 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 
 ## 5. خطة النشر
 
-1. **سيرفر**: `docker compose up -d --build` (PostgreSQL + التطبيق) خلف Nginx مع SSL (Let's Encrypt). الملف `docker-compose.yml` جاهز ويقرأ `.env`.
-2. **سكالبج**: نسخة واحدة تكفي في البداية؛ عند التعدد اضبط `UPSTASH_REDIS_REST_URL/TOKEN` ليكون حد المعدل مشتركاً، ثم Kubernetes.
-3. **iOS/Android**: كود Flutter موحد يستهلك نفس الـ API ويفتح عبر App Store Connect وPlay Console (أسماء: "باربي BARBI"). حتى الإطلاق، الـ PWA يعطي نفس التجربة: "إضافة إلى الشاشة الرئيسية".
-4. **إشعارات Push**: لم تُنفّذ بعد — تحتاج مفاتيح Firebase وكود إرسال (لا توجد متغيرات معلنة بلا كود).
-5. **النسخ الاحتياطي**: `./scripts/backup.sh` ينسخ ويضغط ويتحقق من الملف ويحفظ آخر 14 نسخة — جدوله يومياً (cron).
-6. **المراقبة**: Sentry/uptime + تنبيه على `audit_logs` (محاولات دخول فاشلة متكررة).
-7. **المخطط**: `npm run db:generate` ثم `npm run db:migrate` على قاعدة فيها بيانات (بدل `push`).
+1. **وضع العرض (بلا إعداد):** `docker run -p 3000:3000 barbi` — الحاوية تُقلع PostgreSQL مؤقتاً داخلها، تُنشئ المخطط وتبذر بيانات توضيحية، وتُظهر لافتة «نسخة عرض». البيانات تُصفَّر مع كل إعادة تشغيل، والدفع الإلكتروني غير مفعّل.
+2. **الإنتاج:** `docker compose up -d --build` (PostgreSQL + التطبيق) خلف Nginx مع SSL (Let's Encrypt). `DATABASE_URL` يُمرَّر فيتجاوز الحاوية وضع العرض.
+3. **سكالبج**: نسخة واحدة تكفي في البداية؛ عند التعدد اضبط `UPSTASH_REDIS_REST_URL/TOKEN` ليكون حد المعدل مشتركاً، ثم Kubernetes.
+4. **iOS/Android**: كود Flutter موحد يستهلك نفس الـ API ويفتح عبر App Store Connect وPlay Console (أسماء: "باربي BARBI"). حتى الإطلاق، الـ PWA يعطي نفس التجربة: "إضافة إلى الشاشة الرئيسية".
+5. **إشعارات Push**: لم تُنفّذ بعد — تحتاج مفاتيح Firebase وكود إرسال.
+6. **النسخ الاحتياطي**: `./scripts/backup.sh` ينسخ ويضغط ويتحقق ويحفظ آخر 14 نسخة — جدوله يومياً (cron).
+7. **المراقبة**: Sentry/uptime + تنبيه على `audit_logs` (محاولات دخول فاشلة متكررة).
+8. **المخطط**: `npm run db:generate` ثم `npm run db:migrate` على قاعدة فيها بيانات (بدل `push`).
 
 ## 6. خصوصية السوق العراقي (مطبقة)
 

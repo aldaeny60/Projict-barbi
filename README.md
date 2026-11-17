@@ -59,11 +59,24 @@ curl -X POST http://localhost:3000/api/seed   # بذر البيانات: منت�
 
 ## التشغيل والنشر
 
+**للتجربة السريعة (بلا قاعدة بيانات):** شغّل التطبيق بأمر واحد — الحاوية تكتشف غياب `DATABASE_URL` فتُقلع قاعدة PostgreSQL مؤقتة داخل الحاوية، تُنشئ المخطط، تبذر بيانات العرض، ثم تشغّل الموقع:
+
 ```bash
-docker compose up -d --build     # PostgreSQL + التطبيق (يقرأ .env)
-./scripts/backup.sh              # نسخة احتياطية مضغوطة + تشذيب آخر 14 يومياً
+docker build -t barbi .
+docker run -p 3000:3000 barbi
+# http://localhost:3000  — لوحة التحكم /admin بالرمز 2024
 ```
 
-- `Dockerfile` لصورة التطبيق، و`docker-compose.yml` للتطوير/السيرفر الصغير.
-- عند نمو المخطط: `npm run db:generate` لإنشاء ملفات migrations، ثم `npm run db:migrate` بدل `push` على قاعدة فيها بيانات.
+تظهر لافتة «نسخة عرض تجريبية» في هذا الوضع، والبيانات تُصفَّر عند إعادة التشغيل.
+
+**للإنتاج (قاعدة دائمة):**
+
+```bash
+cp .env.example .env
+docker compose up -d --build     # PostgreSQL + التطبيق، DATABASE_URL يشير إلى خدمة db
+./scripts/backup.sh              # نسخة احتياطية مضغوطة + تشذيب آخر 14
+```
+
+- `Dockerfile` لصورة التطبيق، و`docker-compose.yml` للإنتاج، و`docker-entrypoint.sh` يفصل الوضعين.
+- عند نمو المخطط: `npm run db:generate` ثم `npm run db:migrate` بدل `push` على قاعدة فيها بيانات.
 - النسخ الاحتياطي يحتاج `pg_dump` على الجهاز وعلى جدولة يومية (cron) في الإنتاج.

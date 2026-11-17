@@ -1,6 +1,7 @@
 # باربي — حزمة نشر محلية/سيرفر: PostgreSQL + التطبيق
 # الاستخدام: cp .env.example .env  ثم  docker compose up -d --build
-# ملاحظة: DATABASE_URL داخل التطبيق يجب أن يشير إلى الخدمة db وليس 127.0.0.1.
+# للتشغيل بلا قاعدة خارجية (عرض سريع): احذف كتلة DATABASE_URL من خدمة app،
+# فتدخل الحاوية «وضع العرض» وتُنشئ قاعدة مؤقتة وتبذرها بنفسها.
 services:
   db:
     image: postgres:16-alpine
