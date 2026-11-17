@@ -4,6 +4,8 @@
  * — بلا مكتبة إضافية. عند أي خطأ شبكة نرجع للذاكرة بدل تعطيل الحماية.
  */
 
+import { env } from "./env";
+
 type RateResult = { allowed: true } | { allowed: false; retryAfterSec: number };
 
 
@@ -35,8 +37,8 @@ export async function checkRateLimitShared(
   limit: number,
   windowMs: number
 ): Promise<RateResult> {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.upstash.url;
+  const token = env.upstash.token;
   if (!url || !token) return checkRateLimit(key, limit, windowMs);
 
   const bucket = `rl:${key}:${Math.floor(Date.now() / windowMs)}`;

@@ -3,6 +3,8 @@
  * لا ندّعي إرسالاً لم يحدث: بلا مزود نرجع "skipped" مع سبب مفهوم.
  */
 
+import { env } from "./env";
+
 export type NotifyResult = {
   sms: "sent" | "skipped" | "failed";
   whatsapp: "link";
@@ -14,14 +16,14 @@ const WHATSAPP_TEXT = (name: string, code: string, total: number) =>
   `باربي: أهلاً ${name}، تم استلام طلبك ${code} بقيمة ${total.toLocaleString("en-US")} د.ع. سنتصل بك للتأكيد.`;
 
 export async function sendSms(to: string, text: string): Promise<"sent" | "skipped" | "failed"> {
-  const url = process.env.SMS_PROVIDER_URL;
-  const key = process.env.SMS_PROVIDER_API_KEY;
+  const url = env.sms.url;
+  const key = env.sms.key;
   if (!url || !key) return "skipped";
   try {
     const r = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ sender: process.env.SMS_SENDER_ID || "BARBI", to, text }),
+      body: JSON.stringify({ sender: env.sms.sender, to, text }),
     });
     return r.ok ? "sent" : "failed";
   } catch {

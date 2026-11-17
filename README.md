@@ -32,7 +32,17 @@ curl -X POST http://localhost:3000/api/seed   # بذر البيانات: منت�
 
 ## مفاتيح البيئة
 
-كل الأسرار تُوضع في `.env` (محظور رفعها عبر `.gitignore`). راجع `.env.example` للقائمة الكاملة: قاعدة البيانات، هوية المتجر العامة (`NEXT_PUBLIC_BASE_URL` / `NEXT_PUBLIC_SUPPORT_PHONE` / `NEXT_PUBLIC_WHATSAPP_PHONE`)، أسرار الجلسات الثلاثة، Serper، مزود SMS، Upstash لحد المعدل المشترك، واعتمادات بوابات الدفع (زين كاش، FIB، كي كارد، آسيا حوالة، فاست باي، هواوي باي — الواجهة تعرضها، والربط المباشر ينتظر اعتماد التاجر). إعداد Drizzle (`drizzle.config.ts`) يقرأ `DATABASE_URL` من البيئة فقط.
+**مصدر واحد على الخادم:** كل قراءة لمتغيرات البيئة في الكود تمر عبر [`src/lib/env.ts`](src/lib/env.ts) — لا `process.env` مبعثراً. الاستثناءات المبرَّرة فقط: `NEXT_PUBLIC_*` في [`site.ts`](src/lib/site.ts) (Next يحقنها في حزمة المتصفح)، و`NODE_ENV` في مكوّن عميل، و`drizzle.config.ts` وسكربتات التشغيل.
+
+كل الأسرار تُوضع في `.env` (محظور رفعها عبر `.gitignore`). راجع `.env.example` للقائمة الكاملة:
+
+- **قاعدة البيانات**: `DATABASE_URL` (+ `DEMO_MODE` يضبطه الحاوية تلقائياً في وضع العرض).
+- **هوية المتجر العامة**: `NEXT_PUBLIC_BASE_URL` / `NEXT_PUBLIC_SUPPORT_PHONE` / `NEXT_PUBLIC_WHATSAPP_PHONE`.
+- **الجلسات**: `ADMIN_PIN` و`ADMIN_SESSION_SECRET` و`CUSTOMER_SESSION_SECRET` و`STAFF_SESSION_SECRET` — وفي الإنتاج بلا سرّ يُولَّد سر عشوائي مؤقت لكل عملية (الجلسات تُبطل مع إعادة التشغيل) بدل الرجوع لسر معروف يمكن تزوير الكوكي به.
+- **الإشعارات**: `SMS_PROVIDER_URL` / `SMS_PROVIDER_API_KEY` / `SMS_SENDER_ID`، و`OTP_DEV_ECHO` للتطوير فقط.
+- **حد المعدل**: `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`.
+- **رصد السوق**: `SERPER_API_KEY`.
+- **بوابات الدفع**: المتغيرات موجودة للتوثيق، ولا يقرأها الكود بعد (الربط ينتظر اعتماد التاجر).
 
 ## الصلاحيات وسجل التدقيق
 

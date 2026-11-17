@@ -4,6 +4,7 @@ import { eq, lt } from "drizzle-orm";
 import { createHash, randomInt } from "crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { isValidIraqiPhone } from "@/lib/format";
+import { env } from "@/lib/env";
 import { checkRateLimitShared, clientKey, rateLimited } from "@/lib/rate-limit";
 import { setCustomerCookie } from "@/lib/session";
 
@@ -24,10 +25,6 @@ const TTL_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
 const hashCode = (code: string) => createHash("sha256").update(code).digest("hex");
-
-function mayEchoCode(): boolean {
-  return process.env.NODE_ENV !== "production" || process.env.OTP_DEV_ECHO === "1";
-}
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
@@ -63,15 +60,13 @@ export async function POST(req: NextRequest) {
     // تنظيف الأكواد المنتهية — يحفظ الجدول صغيراً
     await db.delete(otpCodes).where(lt(otpCodes.expiresAt, new Date(Date.now() - 86400000)));
 
-    const smsUrl = process.env.SMS_PROVIDER_URL;
-    const smsKey = process.env.SMS_PROVIDER_API_KEY;
-    if (smsUrl && smsKey) {
+    if (env.sms.configured) {
       try {
-        await fetch(smsUrl, {
+        await fetch(env.sms.url, {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${smsKey}` },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.sms.key}` },
           body: JSON.stringify({
-            sender: process.env.SMS_SENDER_ID || "BARBI",
+            sender: env.sms.sender,
             to: phone,
             text: `باربي: رمز التحقق الخاص بك هو ${code} — صالح 5 دقائق.`,
           }),
@@ -83,7 +78,7 @@ export async function POST(req: NextRequest) {
     }
 
     // لا مزود SMS: الإنتاج يفشل بصراحة بدل تسريب الرمز في الرد
-    if (!mayEchoCode()) {
+    if (!env.canEchoOtp) {
       return Response.json(
         { error: "خدمة الرسائل غير مُهيّأة على هذا الخادم — تواصل مع الدعم" },
         { status: 503 }

@@ -1,19 +1,14 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { NextRequest, NextResponse } from "next/server";
+import { env, sessionSecret } from "./env";
 
 /**
  * جلسات موقّعة (HMAC-SHA256) بصلاحية زمنية — بلا مكتبات خارجية.
- * ثلاثة أنواع: إدارة، موظف كاشير، زبون. كل نوع سرّه الخاص (يرجع إلى
- * ADMIN_SESSION_SECRET إن لم يُضبط سر منفصل).
+ * ثلاثة أنواع: إدارة، موظف كاشير، زبون. كل نوع سرّه الخاص (من `env.ts`).
  */
 
-function sharedSecret(): string {
-  return process.env.ADMIN_SESSION_SECRET || "barbi-dev-secret-change-me";
-}
-
 function secretFor(kind: "customer" | "staff"): string {
-  if (kind === "customer") return process.env.CUSTOMER_SESSION_SECRET || sharedSecret();
-  return process.env.STAFF_SESSION_SECRET || sharedSecret();
+  return sessionSecret(kind);
 }
 
 const hmac = (data: string, secret: string) =>
@@ -60,7 +55,7 @@ export function setCustomerCookie(res: NextResponse, session: CustomerSession) {
     sameSite: "lax",
     path: "/",
     maxAge: CUSTOMER_TTL_SEC,
-    secure: process.env.NODE_ENV === "production",
+    secure: env.isProd,
   });
 }
 
@@ -97,7 +92,7 @@ export function setStaffCookie(res: NextResponse, session: StaffSession) {
     sameSite: "lax",
     path: "/",
     maxAge: STAFF_TTL_SEC,
-    secure: process.env.NODE_ENV === "production",
+    secure: env.isProd,
   });
 }
 

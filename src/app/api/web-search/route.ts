@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, error: "اكتب عبارة البحث" }, { status: 400 });
   }
 
-  const apiKey = process.env.SERPER_API_KEY;
+  const apiKey = env.serperApiKey;
   if (!apiKey) {
     return Response.json(
       { ok: false, keyMissing: true, error: "أضف SERPER_API_KEY إلى ملف .env ثم أعد التشغيل" },

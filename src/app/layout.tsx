@@ -4,6 +4,7 @@ import { Cairo } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Chrome } from "@/components/Chrome";
+import { env } from "@/lib/env";
 
 const cairo = Cairo({ subsets: ["arabic", "latin"], variable: "--font-cairo" });
 
@@ -35,7 +36,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ar" dir="rtl" className={cairo.variable}>
       <body className="bg-paper text-ink antialiased">
-        {process.env.DEMO_MODE === "1" && (
+        {env.demoMode && (
           <div className="bg-butter-300 px-3 py-1.5 text-center text-[11px] font-black text-ink">
             نسخة عرض تجريبية — بيانات توضيحية تُصفَّر عند إعادة التشغيل، والدفع الإلكتروني غير مفعّل
           </div>

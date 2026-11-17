@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { coupons, deliveryFees, orders } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
+import { env } from "./env";
 
 export async function getCouponDiscount(
   code: string | null | undefined,
@@ -45,7 +46,7 @@ export async function computeDeliveryFee(governorate: string | null | undefined)
     .from(deliveryFees)
     .where(eq(deliveryFees.governorate, governorate))
     .limit(1);
-  return row?.fee ?? 5000;
+  return row?.fee ?? env.defaultDeliveryFee;
 }
 
 export async function nextOrderCode(prefix: string) {

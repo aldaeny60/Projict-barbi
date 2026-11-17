@@ -16,6 +16,7 @@ import {
 import { sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { ipOf, logAudit } from "@/lib/audit";
+import { env } from "@/lib/env";
 import { distributeStock } from "@/lib/stock";
 import {
   SEED_CATEGORIES,
@@ -56,7 +57,7 @@ const GOVS_WEIGHTED = [
 
 export async function GET(req: NextRequest) {
   // البذر ليس عاماً: في الإنتاج يتطلب جلسة إدارة، وفي التطوير يُسمح به لتهيئة أولى فقط
-  if (process.env.NODE_ENV === "production") {
+  if (env.isProd) {
     const { isAdminAuthed } = await import("@/lib/admin-auth");
     if (!isAdminAuthed(req)) {
       return Response.json({ seeded: false, error: "البذر مخصص للإدارة فقط" }, { status: 401 });

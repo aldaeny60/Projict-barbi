@@ -1,25 +1,24 @@
 import type { NextRequest, NextResponse } from "next/server";
+import { env, sessionSecret } from "./env";
 import { signToken, verifyToken } from "./session";
 
 export const ADMIN_COOKIE = "barbi_admin";
 export const ADMIN_TTL_SEC = 12 * 60 * 60;
-/** dev fallback only — override via ADMIN_PIN in .env for any real deployment */
-const DEV_PIN = "2024";
 
 export type AdminRole = "owner" | "manager";
 export type AdminSession = { name: string; role: AdminRole };
 
 export function adminPin(): string {
-  return process.env.ADMIN_PIN || DEV_PIN;
+  return env.adminPin;
 }
 
 function adminSecret(): string {
-  return process.env.ADMIN_SESSION_SECRET || "barbi-dev-secret-change-me";
+  return sessionSecret("admin");
 }
 
 /** هل الرمز الافتراضي مستخدم؟ /api/health يُظهر تحذيراً ولا يُخفيه */
 export function adminPinIsDefault(): boolean {
-  return !process.env.ADMIN_PIN;
+  return env.adminPinIsDefault;
 }
 
 /**
@@ -54,7 +53,7 @@ export function setAdminCookie(res: NextResponse, session: AdminSession = { name
     sameSite: "lax",
     path: "/",
     maxAge: ttlSec,
-    secure: process.env.NODE_ENV === "production",
+    secure: env.isProd,
   });
 }
 

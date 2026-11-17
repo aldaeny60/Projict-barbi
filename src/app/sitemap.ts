@@ -1,11 +1,12 @@
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import type { MetadataRoute } from "next";
+import { SITE } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? "https://sighar.iq";
+  const base = SITE.baseUrl.replace(/\/+$/, "");
   let productUrls: MetadataRoute.Sitemap = [];
   try {
     const rows = await db.select({ id: products.id, createdAt: products.createdAt }).from(products);
