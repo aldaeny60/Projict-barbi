@@ -48,5 +48,5 @@
 
 
 ## التحقق
-`scripts/api-tests.mjs`: 53 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `f4eacc6`.
+`scripts/api-tests.mjs`: 53 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `a6eab3d` (job 134122330881).
 
