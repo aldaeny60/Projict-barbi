@@ -27,6 +27,7 @@
 | بحث الطلبات | VERIFIED | كود/هاتف/اسم في لوحة التحكم (QA 56) |
 | ترويسات الأمان | VERIFIED | CSP + COOP + HSTS في `next.config.ts` |
 | النسخ والاستعادة | VERIFIED (سكربت) | `backup.sh` + `restore.sh` بتأكيد صريح ومعاملة واحدة |
+| التهيئة (env) | VERIFIED | `.env` محلي بأسرار عشوائية ورمز إدارة غير افتراضي + تحقق إقلاع يرفض `2024` في الإنتاج + `npm run env:check` |
 | التشغيل والنشر | VERIFIED (ملفات) | `docker-compose.yml` + `scripts/backup.sh` + سكربتات db:generate/migrate |
 | حسابات الإدارة | VERIFIED | مالك/مدير برموز مُجزّأة، وكل إجراء منسوب لاسم صاحبه (QA 51) |
 | الزبائن (CRM) | VERIFIED | قائمة بعدد الطلبات والإنفاق وآخر طلب (QA 37) |
