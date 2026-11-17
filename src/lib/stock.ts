@@ -33,12 +33,18 @@ export function distributeStock(total: number, sizes: string[]): SizeStock[] {
   return sizes.map((size, i) => ({ size, stock: per + (i < rem ? 1 : 0) }));
 }
 
-/** استبدال صفوف مقاسات منتج (يُستخدم من لوحة التحكم) */
+/** استبدال صفوف مقاسات منتج (يُستخدم من لوحة التحكم) — يوحّد المقاسات المكررة */
 export async function replaceSizeStock(productId: number, rows: SizeStock[]): Promise<void> {
   await db.delete(productSizeStock).where(eq(productSizeStock.productId, productId));
-  if (!rows.length) return;
+  const unique = new Map<string, number>();
+  for (const r of rows) {
+    const size = String(r.size ?? "").trim();
+    if (!size) continue;
+    unique.set(size, Math.max(0, Math.round(r.stock)));
+  }
+  if (!unique.size) return;
   await db.insert(productSizeStock).values(
-    rows.map((r) => ({ productId, size: r.size, stock: Math.max(0, Math.round(r.stock)) }))
+    [...unique.entries()].map(([size, stock]) => ({ productId, size, stock }))
   );
 }
 

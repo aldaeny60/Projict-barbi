@@ -145,7 +145,14 @@ export async function POST(req: NextRequest) {
                 )
               )
               .returning({ size: productSizeStock.size });
-            if (!sizeOk.length) throw new Error(`OUT_OF_STOCK:${l.name} (${l.size})`);
+            if (!sizeOk.length) {
+              const [hasRows] = await tx
+                .select({ size: productSizeStock.size })
+                .from(productSizeStock)
+                .where(eq(productSizeStock.productId, l.productId))
+                .limit(1);
+              if (hasRows) throw new Error(`OUT_OF_STOCK:${l.name} (${l.size})`);
+            }
           }
           const updated = await tx
             .update(products)

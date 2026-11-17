@@ -348,11 +348,13 @@ function ProductsTab() {
   };
   const openEdit = (p: ProductDTO) => {
     const rows = new Map((p.sizeStock ?? []).map((r) => [r.size, r.stock]));
+    // منتج بلا توزيع مقاسات (بيانات قديمة): نوزّع إجماليه على مقاساته بدل تصفيرها
+    const fallback = distributeStock(p.stock, p.sizes);
     setEditing({
       id: p.id, name: p.name, description: p.description, price: String(p.price),
       compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "", stock: String(p.stock),
       categoryId: p.categoryId, images: p.images.join("\n"), sizes: p.sizes, colors: p.colors, isNew: p.isNew,
-      sizeStock: Object.fromEntries(p.sizes.map((s) => [s, String(rows.get(s) ?? 0)])),
+      sizeStock: Object.fromEntries(p.sizes.map((s) => [s, String(rows.get(s) ?? fallback[s] ?? 0)])),
     });
   };
 
