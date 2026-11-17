@@ -606,6 +606,75 @@ async function run() {
     return `${a.invoice.code} مرة واحدة ✓`;
   });
 
+  // 43) مخزون المقاس يمنع بيع كمية أكبر من المتاح له
+  await test("مخزون المقاس يمنع البيع الزائد", async () => {
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const p = all.products.find((x) => (x.sizeStock ?? []).some((s) => s.stock > 0 && s.stock <= 8));
+    assert(p, "no product with size stock");
+    const det = await fetch(`${BASE}/api/products/${p.id}`).then(j);
+    const st = (det.product.sizeStock ?? []).find((s) => s.stock > 0 && s.stock <= 8);
+    assert(st, "size stock missing in product detail");
+
+    const over = await fetch(`${BASE}/api/orders`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        customerName: "QA size",
+        phone: QA_PHONE,
+        governorate: "بغداد",
+        address: "QA size",
+        items: [{ productId: p.id, qty: Math.min(10, st.stock + 1), size: st.size, color: p.colors[0]?.name }],
+      }),
+    });
+    assert(over.status === 409, `over-size got ${over.status}`);
+
+    const okRes = await fetch(`${BASE}/api/orders`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        customerName: "QA size",
+        phone: QA_PHONE,
+        governorate: "بغداد",
+        address: "QA size",
+        items: [{ productId: p.id, qty: 1, size: st.size, color: p.colors[0]?.name }],
+      }),
+    }).then(j);
+    assert(okRes.ok, JSON.stringify(okRes));
+
+    const after = (await fetch(`${BASE}/api/products/${p.id}`).then(j)).product;
+    const st2 = after.sizeStock.find((s) => s.size === st.size);
+    assert(st2.stock === st.stock - 1, `size ${st.stock} -> ${st2.stock}`);
+    assert(after.stock === det.product.stock - 1, "total not decremented with size");
+    return `${st.size}: ${st.stock} → ${st2.stock} ✓`;
+  });
+
+  // 44) لوحة التحكم تضبط مخزون كل مقاس ويُحدَّث الإجمالي
+  await test("تعديل مخزون المقاسات من الإدارة", async () => {
+    const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
+    const p = all.products.find((x) => (x.sizeStock ?? []).length >= 2);
+    assert(p, "no multi-size product");
+    const original = p.sizeStock;
+    const target = [
+      { size: original[0].size, stock: 1 },
+      ...original.slice(1).map((s) => ({ size: s.size, stock: 0 })),
+    ];
+    const r = await fetch(`${BASE}/api/products/${p.id}`, {
+      method: "PATCH",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ sizeStock: target }),
+    }).then(j);
+    assert(r.product?.stock === 1, `total ${r.product?.stock}`);
+
+    await fetch(`${BASE}/api/products/${p.id}`, {
+      method: "PATCH",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ sizeStock: original }),
+    });
+    const back = (await fetch(`${BASE}/api/products/${p.id}`).then(j)).product;
+    assert(back.stock === original.reduce((s, x) => s + x.stock, 0), "restore failed");
+    return "الإجمالي = مجموع المقاسات ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

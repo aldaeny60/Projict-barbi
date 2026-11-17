@@ -47,12 +47,13 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 ### الطلبات (ويب)
 | Method | Path | الوصف |
 |---|---|---|
-| POST | `/api/orders` | إنشاء طلب — `{customerName, phone(07XXXXXXXXX), governorate, district?, address, paymentMethod, couponCode?, requestId?, items:[{productId,qty,size,color}]}` → فاتورة رقمية + حالة الإشعار. `requestId` (8–64 حرفاً) يمنع تكرار الطلب: نفس المفتاح يُعيد الطلب نفسه مع `duplicate:true` |
+| POST | `/api/orders` | إنشاء طلب — `{customerName, phone(07XXXXXXXXX), governorate, district?, address, paymentMethod, couponCode?, requestId?, items:[{productId,qty,size,color}]}` → فاتورة رقمية + حالة الإشعار. `requestId` (8–64 حرفاً) يمنع تكرار الطلب: نفس المفتاح يُعيد الطلب نفسه مع `duplicate:true`. يرجع 409 إذا كان رصيد المقاس المطلوب أقل من الكمية |
 | GET | `/api/orders` | طلبات الزبون الحالي — بجلسة OTP فقط، مع `events` (سجل الحالات) و`refundTotal` |
 | PATCH | `/api/orders/[id]` | تغيير الحالة وفق الانتقالات المسموحة فقط (`pending→processing/cancelled`, `processing→shipped/cancelled`, `shipped→out_for_delivery/delivered`, `out_for_delivery→delivered`, `delivered→return_requested/returned`) — يُسجَّل في `order_events` |
 | POST | `/api/orders/[id]/returns` | إرجاع جزئي/كامل بعد التسليم — `{items:[{orderItemId, qty}], reason?}` → `{refund, fullyReturned, order}`. يرفض الكمية فوق المتبقي (409) ويُعيد مخزون الجزء المسترجع فقط |
 | GET | `/api/orders/[id]` | تفاصيل الطلب (مالكه أو الإدارة/الكاشير) مع `events` و`returns` و`refundTotal` |
-| GET | `/api/products` | فلاتر: `section`, `category`, `q`, `sort`, `deals`, `new`, `minPrice`, `maxPrice`, `size`, `color`, `limit`, `offset` — و`total` هو عدد النتائج المطابقة |
+| GET | `/api/products` | فلاتر: `section`, `category`, `q`, `sort`, `deals`, `new`, `minPrice`, `maxPrice`, `size`, `color`, `limit`, `offset` — و`total` هو عدد النتائج المطابقة. كل منتج يحمل `sizeStock:[{size,stock}]` |
+| PATCH | `/api/products/[id]` | تعديل منتج؛ تمرير `sizeStock:[{size,stock}]` يضبط رصيد كل مقاس ويجعل `stock` = مجموعها. تعديل `stock` وحده يوزّع الفرق على المقاسات |
 | POST | `/api/coupons/validate` | `{code, subtotal}` → `{valid, discount, message}` |
 | GET/POST/PATCH/DELETE | `/api/coupons` | إدارة الكوبونات |
 | GET/PATCH | `/api/delivery` | رسوم التوصيل لكل محافظة |

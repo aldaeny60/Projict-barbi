@@ -6,9 +6,10 @@ import {
   orderReturnItems,
   orders,
   products,
+  productSizeStock,
   ORDER_STATUSES,
 } from "@/db/schema";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { isAdminAuthed } from "@/lib/admin-auth";
 import { ipOf, logAudit, type AuditActor } from "@/lib/audit";
@@ -123,6 +124,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
             soldCount: sql`GREATEST(${products.soldCount} - ${qty}, 0)`,
           })
           .where(eq(products.id, it.productId));
+        if (it.size) {
+          await tx
+            .update(productSizeStock)
+            .set({ stock: sql`${productSizeStock.stock} + ${qty}` })
+            .where(
+              and(eq(productSizeStock.productId, it.productId), eq(productSizeStock.size, it.size))
+            );
+        }
       }
     }
 

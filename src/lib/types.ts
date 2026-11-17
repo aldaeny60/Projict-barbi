@@ -31,6 +31,8 @@ export type ProductDTO = {
   categorySlug: string;
   categoryName: string;
   section: "boys" | "girls" | "newborn";
+  /** مخزون كل مقاس — مجموعه يساوي stock */
+  sizeStock?: { size: string; stock: number }[];
 };
 
 export type ReviewDTO = {

@@ -3,6 +3,7 @@ import { categories, products } from "@/db/schema";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { toProductDTO } from "@/lib/dto";
+import { sizeStockMap, distributeStock, replaceSizeStock } from "@/lib/stock";
 import { adminUnauthorized, isAdminAuthed } from "@/lib/admin-auth";
 import { adminActor, logAudit } from "@/lib/audit";
 
@@ -65,7 +66,8 @@ export async function GET(req: NextRequest) {
     .limit(limit)
     .offset(offset);
 
-  let dtos = rows.map((p) => toProductDTO(p, catById.get(p.categoryId)));
+  const sizeMap = await sizeStockMap(rows.map((p) => p.id));
+  let dtos = rows.map((p) => toProductDTO(p, catById.get(p.categoryId), sizeMap.get(p.id)));
   if (sort === "deals" || deals) {
     dtos = dtos.sort((a, b) => (b.discountPct ?? 0) - (a.discountPct ?? 0) || b.soldCount - a.soldCount);
   }
@@ -106,6 +108,9 @@ export async function POST(req: NextRequest) {
         isNew: Boolean(body.isNew),
       })
       .returning();
+    // مخزون المقاسات يبدأ موزّعاً على الإجمالي
+    const sizes = Array.isArray(row.sizes) ? row.sizes : [];
+    if (sizes.length) await replaceSizeStock(row.id, distributeStock(row.stock, sizes));
     await logAudit(adminActor(req), "product.create", `product:${row.id}`, {
       name: row.name,
       price: row.price,

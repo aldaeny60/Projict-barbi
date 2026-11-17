@@ -52,6 +52,11 @@ export function ProductView({
   const fav = hasFav(p.id);
   const soldOut = p.stock <= 0;
   const saveAmount = p.compareAtPrice ? p.compareAtPrice - p.price : 0;
+  /** مخزون المقاس المحدد — null يعني لا توزيع مقاسات لهذا المنتج */
+  const stockOfSize = (s: string | null) =>
+    s ? (p.sizeStock?.find((x) => x.size === s)?.stock ?? null) : null;
+  const selectedStock = stockOfSize(size);
+  const maxQty = selectedStock ?? p.stock;
 
   const ready = Boolean(size && color);
   const tryAdd = (silent = false): boolean => {
@@ -63,6 +68,10 @@ export function ProductView({
       toast("اختاري اللون أولاً", "err");
       return false;
     }
+    if (qty > maxQty) {
+      toast("الكمية المطلوبة غير متوفرة بهذا المقاس", "err");
+      return false;
+    }
     add({
       productId: p.id,
       slug: p.slug,
@@ -72,7 +81,7 @@ export function ProductView({
       image: p.images[0] ?? "",
       size,
       color,
-      stock: p.stock,
+      stock: maxQty,
     }, qty);
     if (!silent) toast("انضاف للسلة — خيار موفق!");
     return true;
@@ -239,26 +248,37 @@ export function ProductView({
             <div className="mb-2 flex items-center justify-between">
               <p className="text-sm font-black">
                 المقاس العمري:{" "}
-                <span className={`font-bold ${size ? "text-blush-600" : "text-ink-faint"}`}>{size ?? "اختاري العمر"}</span>
+                <span className={`font-bold ${size ? "text-blush-600" : "text-ink-faint"}`}>
+                  {size ?? "اختاري العمر"}
+                  {selectedStock !== null ? ` — متبقٍ ${selectedStock}` : ""}
+                </span>
               </p>
               <button onClick={() => setTab("chart")} className="flex items-center gap-1 text-xs font-black text-lilac-600 hover:underline">
                 <Ruler size={13} /> جدول المقاسات
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-              {p.sizes.map((s) => (
+              {p.sizes.map((s) => {
+                const left = stockOfSize(s);
+                const gone = left !== null && left <= 0;
+                return (
                 <button
                   key={s}
-                  onClick={() => setSize(s)}
+                  disabled={gone}
+                  onClick={() => { setSize(s); setQty(1); }}
                   className={`rounded-2xl border-2 py-2.5 text-center text-xs font-black transition-all active:scale-95 ${
-                    size === s
-                      ? "border-blush-500 bg-blush-50 text-blush-600 shadow-soft"
-                      : "border-ink/10 bg-white text-ink hover:border-blush-300"
+                    gone
+                      ? "cursor-not-allowed border-ink/5 bg-paper text-ink-faint line-through"
+                      : size === s
+                        ? "border-blush-500 bg-blush-50 text-blush-600 shadow-soft"
+                        : "border-ink/10 bg-white text-ink hover:border-blush-300"
                   }`}
                 >
                   {s}
+                  {gone ? <span className="block text-[9px] font-bold">نفذ</span> : null}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
 

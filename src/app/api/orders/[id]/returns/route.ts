@@ -1,6 +1,14 @@
 import { db } from "@/db";
-import { orderEvents, orderItems, orderReturns, orderReturnItems, orders, products } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import {
+  orderEvents,
+  orderItems,
+  orderReturns,
+  orderReturnItems,
+  orders,
+  products,
+  productSizeStock,
+} from "@/db/schema";
+import { and, eq, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { isAdminAuthed } from "@/lib/admin-auth";
 import { ipOf, logAudit } from "@/lib/audit";
@@ -80,7 +88,13 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const already = new Map(returnedRows.map((r) => [r.orderItemId, Number(r.qty)]));
 
     // تحقق من كل سطر قبل أي كتابة
-    const lines: { orderItemId: number; qty: number; amount: number; productId: number | null }[] = [];
+    const lines: {
+      orderItemId: number;
+      qty: number;
+      amount: number;
+      productId: number | null;
+      size: string | null;
+    }[] = [];
     for (const reqLine of requested) {
       const item = byId.get(reqLine.orderItemId);
       if (!item) return { ok: false, error: "سطر غير موجود في الفاتورة", code: 400 };
@@ -97,6 +111,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         qty: reqLine.qty,
         amount: item.price * reqLine.qty,
         productId: item.productId,
+        size: item.size,
       });
     }
 
@@ -124,6 +139,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
           soldCount: sql`GREATEST(${products.soldCount} - ${l.qty}, 0)`,
         })
         .where(eq(products.id, l.productId));
+      if (l.size) {
+        await tx
+          .update(productSizeStock)
+          .set({ stock: sql`${productSizeStock.stock} + ${l.qty}` })
+          .where(
+            and(eq(productSizeStock.productId, l.productId), eq(productSizeStock.size, l.size))
+          );
+      }
     }
 
     // هل استُرجع كل شيء؟

@@ -11,10 +11,12 @@ import {
   orderItems,
   orderEvents,
   customers,
+  productSizeStock,
 } from "@/db/schema";
 import { sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { ipOf, logAudit } from "@/lib/audit";
+import { distributeStock } from "@/lib/stock";
 import {
   SEED_CATEGORIES,
   SEED_PRODUCTS,
@@ -97,6 +99,16 @@ export async function GET(req: NextRequest) {
         }))
       )
       .returning();
+
+    // مخزون المقاسات موزّعاً على إجمالي كل منتج
+    const sizeRows = insertedProducts.flatMap((p) =>
+      distributeStock(p.stock, Array.isArray(p.sizes) ? p.sizes : []).map((s) => ({
+        productId: p.id,
+        size: s.size,
+        stock: s.stock,
+      }))
+    );
+    if (sizeRows.length) await db.insert(productSizeStock).values(sizeRows);
 
     // reviews – a few showcased per product
     const rng = mulberry32(20260207);

@@ -363,3 +363,25 @@ export const orderReturnItems = pgTable(
 );
 
 export type OrderReturnItemRow = typeof orderReturnItems.$inferSelect;
+
+
+/* ───────────────────────── مخزون لكل مقاس ───────────────────────── */
+
+/**
+ * مخزون المنتج موزّعاً على المقاسات — يمنع بيع مقاس نافد بينما المنتج «متوفر».
+ * مجموع الصفوف يجب أن يبقى مساوياً لـ products.stock؛ كل عملية بيع/إرجاع
+ * تُحدّث الصف والمنتج معاً في نفس المعاملة.
+ */
+export const productSizeStock = pgTable(
+  "product_size_stock",
+  {
+    productId: integer("product_id")
+      .references(() => products.id, { onDelete: "cascade" })
+      .notNull(),
+    size: varchar("size", { length: 40 }).notNull(),
+    stock: integer("stock").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.productId, t.size] })]
+);
+
+export type ProductSizeStockRow = typeof productSizeStock.$inferSelect;

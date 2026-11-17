@@ -531,9 +531,26 @@ export default function PosPage() {
             <p className="text-sm font-black text-blush-600">{formatIQD(variantFor.price)}</p>
             <p className="mb-1.5 mt-4 text-xs font-black text-ink-soft">المقاس</p>
             <div className="flex flex-wrap gap-1.5">
-              {variantFor.sizes.map((s) => (
-                <button key={s} onClick={() => setVSize(s)} className={`rounded-xl px-3 py-2 text-[11px] font-black ${vSize === s ? "bg-ink text-white" : "bg-paper ring-1 ring-ink/10"}`}>{s}</button>
-              ))}
+              {variantFor.sizes.map((s) => {
+                const left = variantFor.sizeStock?.find((x) => x.size === s)?.stock ?? null;
+                const gone = left !== null && left <= 0;
+                return (
+                  <button
+                    key={s}
+                    disabled={gone}
+                    onClick={() => setVSize(s)}
+                    className={`rounded-xl px-3 py-2 text-[11px] font-black ${
+                      gone
+                        ? "cursor-not-allowed bg-paper text-ink-faint line-through ring-1 ring-ink/10"
+                        : vSize === s
+                          ? "bg-ink text-white"
+                          : "bg-paper ring-1 ring-ink/10"
+                    }`}
+                  >
+                    {s}{left !== null ? ` (${left})` : ""}{gone ? " — نفذ" : ""}
+                  </button>
+                );
+              })}
             </div>
             <p className="mb-1.5 mt-3 text-xs font-black text-ink-soft">اللون</p>
             <div className="flex flex-wrap gap-2">
@@ -541,10 +558,18 @@ export default function PosPage() {
                 <button key={c.name} title={c.name} onClick={() => setVColor(c.name)} className={`size-8 rounded-full ring-2 transition-transform ${vColor === c.name ? "ring-ink scale-110" : "ring-black/10"}`} style={{ background: c.hex }} />
               ))}
             </div>
-            <button onClick={() => addLine(variantFor, vSize, vColor || variantFor.colors[0]?.name || "-")}
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-3.5 text-sm font-black text-white transition-transform hover:scale-[1.02]">
-              <Plus size={15} /> إضافة للفاتورة
-            </button>
+            {(() => {
+              const left = variantFor.sizeStock?.find((x) => x.size === vSize)?.stock ?? null;
+              return (
+                <button
+                  disabled={left !== null && left <= 0}
+                  onClick={() => addLine(variantFor, vSize, vColor || variantFor.colors[0]?.name || "-")}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-3.5 text-sm font-black text-white transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Plus size={15} /> إضافة للفاتورة
+                </button>
+              );
+            })()}
           </div>
         )}
       </Modal>

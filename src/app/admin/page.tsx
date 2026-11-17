@@ -308,7 +308,17 @@ function Overview({ stats }: { stats: Stats | null }) {
 type ProductForm = {
   id?: number; name: string; description: string; price: string; compareAtPrice: string;
   stock: string; categoryId: number; images: string; sizes: string[]; colors: { name: string; hex: string }[]; isNew: boolean;
+  /** مخزون كل مقاس — يُرسل للخادم ويحسب الإجمالي */
+  sizeStock: Record<string, string>;
 };
+
+/** توزيع الإجمالي على المقاسات بالتساوي (والباقي على الأول) */
+function distributeStock(total: number, sizes: string[]): Record<string, string> {
+  if (!sizes.length) return {};
+  const per = Math.floor(total / sizes.length);
+  const rem = total % sizes.length;
+  return Object.fromEntries(sizes.map((s, i) => [s, String(per + (i < rem ? 1 : 0))]));
+}
 
 function ProductsTab() {
   const [items, setItems] = useState<ProductDTO[] | null>(null);
@@ -328,15 +338,23 @@ function ProductsTab() {
 
   const filtered = (items ?? []).filter((p) => !q || p.name.includes(q));
 
-  const openNew = () => setEditing({
-    name: "", description: "", price: "", compareAtPrice: "", stock: "20",
-    categoryId: cats[0]?.id ?? 1, images: "", sizes: [...SIZES_ALL.slice(2, 8)], colors: [ColorPalette[0]], isNew: true,
-  });
-  const openEdit = (p: ProductDTO) => setEditing({
-    id: p.id, name: p.name, description: p.description, price: String(p.price),
-    compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "", stock: String(p.stock),
-    categoryId: p.categoryId, images: p.images.join("\n"), sizes: p.sizes, colors: p.colors, isNew: p.isNew,
-  });
+  const openNew = () => {
+    const sizes = [...SIZES_ALL.slice(2, 8)];
+    setEditing({
+      name: "", description: "", price: "", compareAtPrice: "", stock: "20",
+      categoryId: cats[0]?.id ?? 1, images: "", sizes, colors: [ColorPalette[0]], isNew: true,
+      sizeStock: distributeStock(20, sizes),
+    });
+  };
+  const openEdit = (p: ProductDTO) => {
+    const rows = new Map((p.sizeStock ?? []).map((r) => [r.size, r.stock]));
+    setEditing({
+      id: p.id, name: p.name, description: p.description, price: String(p.price),
+      compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "", stock: String(p.stock),
+      categoryId: p.categoryId, images: p.images.join("\n"), sizes: p.sizes, colors: p.colors, isNew: p.isNew,
+      sizeStock: Object.fromEntries(p.sizes.map((s) => [s, String(rows.get(s) ?? 0)])),
+    });
+  };
 
   /** رفع صور حقيقية من الجهاز إلى الخادم وإضافتها لقائمة روابط المنتج */
   const uploadImages = async (files: FileList | null) => {
@@ -362,12 +380,18 @@ function ProductsTab() {
   const save = async () => {
     if (!editing) return;
     setSaving(true);
+    const sizeRows = editing.sizes.map((s) => ({
+      size: s,
+      stock: Math.max(0, Math.round(Number(editing.sizeStock[s] ?? 0) || 0)),
+    }));
     const payload = {
       name: editing.name, description: editing.description,
       price: Number(editing.price), compareAtPrice: editing.compareAtPrice ? Number(editing.compareAtPrice) : null,
-      stock: Number(editing.stock), categoryId: editing.categoryId,
+      stock: sizeRows.length ? sizeRows.reduce((a, b) => a + b.stock, 0) : Number(editing.stock),
+      categoryId: editing.categoryId,
       images: editing.images.split(/\n+/).map((s) => s.trim()).filter(Boolean),
       sizes: editing.sizes, colors: editing.colors, isNew: editing.isNew,
+      ...(sizeRows.length ? { sizeStock: sizeRows } : {}),
     };
     const url = editing.id ? `/api/products/${editing.id}` : "/api/products";
     await fetch(url, { method: editing.id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -379,6 +403,18 @@ function ProductsTab() {
   const del = async (id: number) => {
     await fetch(`/api/products/${id}`, { method: "DELETE" });
     load();
+  };
+
+  const toggleSize = (s: string) => {
+    if (!editing) return;
+    const on = editing.sizes.includes(s);
+    setEditing({
+      ...editing,
+      sizes: on ? editing.sizes.filter((x) => x !== s) : [...editing.sizes, s],
+      sizeStock: on
+        ? Object.fromEntries(Object.entries(editing.sizeStock).filter(([k]) => k !== s))
+        : { ...editing.sizeStock, [s]: editing.sizeStock[s] ?? "0" },
+    });
   };
 
   return (
@@ -483,10 +519,33 @@ function ProductsTab() {
                   <p className="mb-1.5 text-xs font-black text-ink-soft">المقاسات المتوفرة</p>
                   <div className="flex flex-wrap gap-1.5">
                     {SIZES_ALL.map((s) => (
-                      <button key={s} type="button" onClick={() => setEditing({ ...editing, sizes: editing.sizes.includes(s) ? editing.sizes.filter((x) => x !== s) : [...editing.sizes, s] })}
+                      <button key={s} type="button" onClick={() => toggleSize(s)}
                         className={`rounded-xl px-2.5 py-1.5 text-[10px] font-black ${editing.sizes.includes(s) ? "bg-ink text-white" : "bg-paper ring-1 ring-ink/10"}`}>{s}</button>
                     ))}
                   </div>
+                  {editing.sizes.length > 0 && (
+                    <div className="mt-2 space-y-1.5 rounded-2xl bg-paper p-2.5">
+                      <p className="text-[10px] font-black text-ink-soft">
+                        مخزون كل مقاس — الإجمالي {editing.sizes.reduce((a, s) => a + (Number(editing.sizeStock[s]) || 0), 0)}
+                      </p>
+                      {editing.sizes.map((s) => (
+                        <label key={s} className="flex items-center gap-2">
+                          <span className="flex-1 text-[11px] font-bold">{s}</span>
+                          <input
+                            value={editing.sizeStock[s] ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/[^\d]/g, "");
+                              setEditing({ ...editing, sizeStock: { ...editing.sizeStock, [s]: v } });
+                            }}
+                            placeholder="0"
+                            inputMode="numeric"
+                            dir="ltr"
+                            className="w-16 rounded-lg border border-ink/10 bg-white py-1 text-center text-[11px] font-black"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <p className="mb-1.5 text-xs font-black text-ink-soft">الألوان المتوفرة</p>

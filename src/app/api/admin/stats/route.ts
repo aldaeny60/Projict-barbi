@@ -6,6 +6,7 @@ import { gatewayById } from "@/lib/payments";
 import { toProductDTO } from "@/lib/dto";
 import { adminUnauthorized, isAdminAuthed } from "@/lib/admin-auth";
 import { adminActor, logAudit } from "@/lib/audit";
+import { alignSizeStockToTotal } from "@/lib/stock";
 import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -159,5 +160,7 @@ export async function PATCH(req: NextRequest) {
     add: Math.round(Number(body.add) || 0),
     stock: row?.stock ?? null,
   });
+  // يبقى مجموع مخزون المقاسات مساوياً للإجمالي
+  if (row) await alignSizeStockToTotal(row.id, row.stock);
   return Response.json({ product: row });
 }

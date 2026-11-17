@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { branches, coupons, orderEvents, orderItems, orders, products } from "@/db/schema";
+import { branches, coupons, orderEvents, orderItems, orders, products, productSizeStock } from "@/db/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { cleanRequestKey, getCouponDiscount, nextOrderCode } from "@/lib/order-utils";
@@ -133,6 +133,20 @@ export async function POST(req: NextRequest) {
     try {
       order = await db.transaction(async (tx) => {
         for (const l of lines) {
+          if (l.size) {
+            const sizeOk = await tx
+              .update(productSizeStock)
+              .set({ stock: sql`${productSizeStock.stock} - ${l.qty}` })
+              .where(
+                and(
+                  eq(productSizeStock.productId, l.productId),
+                  eq(productSizeStock.size, l.size),
+                  gte(productSizeStock.stock, l.qty)
+                )
+              )
+              .returning({ size: productSizeStock.size });
+            if (!sizeOk.length) throw new Error(`OUT_OF_STOCK:${l.name} (${l.size})`);
+          }
           const updated = await tx
             .update(products)
             .set({ stock: sql`${products.stock} - ${l.qty}`, soldCount: sql`${products.soldCount} + ${l.qty}` })

@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { categories, products, reviews } from "@/db/schema";
+import { categories, productSizeStock, products, reviews } from "@/db/schema";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { toProductDTO } from "./dto";
 
@@ -42,8 +42,16 @@ export async function getProductDetail(idOrSlug: string) {
     .limit(20);
 
   const catById = new Map([[cat?.id ?? -1, cat]]);
+  const sizeRows = await db
+    .select()
+    .from(productSizeStock)
+    .where(eq(productSizeStock.productId, row.id));
   return {
-    product: toProductDTO(row, cat),
+    product: toProductDTO(
+      row,
+      cat,
+      sizeRows.map((s) => ({ size: s.size, stock: s.stock }))
+    ),
     similar: similar.map((p) => toProductDTO(p, catById.get(p.categoryId) ?? cat)),
     reviews: productReviews.map((r) => ({
       id: r.id,
