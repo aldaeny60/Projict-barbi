@@ -46,7 +46,6 @@ export function ProductView({
   const [reviews, setReviews] = useState(initialReviews);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
-  const [author, setAuthor] = useState("");
   const [sending, setSending] = useState(false);
 
   const fav = hasFav(p.id);
@@ -97,28 +96,25 @@ export function ProductView({
   );
 
   const submitReview = async () => {
-    if (!comment.trim()) return toast("اكتبي ملاحظتج عن المنتج", "err");
+    if (!customer) return toast("سجّلي برقمك أولاً من صفحة حسابي", "err");
+    if (comment.trim().length < 3) return toast("اكتبي ملاحظتج عن المنتج", "err");
     setSending(true);
     try {
       const r = await fetch("/api/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId: p.id,
-          author: author.trim() || customer?.name || undefined,
-          rating,
-          comment: comment.trim(),
-        }),
+        body: JSON.stringify({ productId: p.id, rating, comment: comment.trim() }),
       });
-      if (!r.ok) throw new Error();
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? "تعذر إرسال التقييم");
       setReviews((prev) => [
-        { id: Date.now(), author: author.trim() || customer?.name || "عميل باربي", rating, comment: comment.trim(), createdAt: new Date().toISOString() },
-        ...prev,
+        { id: Date.now(), author: d.author ?? customer.name, rating, comment: comment.trim(), createdAt: new Date().toISOString() },
+        ...prev.filter((x) => x.author !== (d.author ?? customer.name)),
       ]);
       setComment("");
       toast("شكراً! تم نشر تقييمج");
-    } catch {
-      toast("تعذر إرسال التقييم", "err");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "تعذر إرسال التقييم", "err");
     } finally {
       setSending(false);
     }
@@ -418,6 +414,15 @@ export function ProductView({
 
               <div className="card-bubble h-fit p-5">
                 <h4 className="text-sm font-black">شاركينا رأيج بالمنتج</h4>
+                {customer ? (
+                  <p className="mt-1 text-[11px] font-bold text-ink-faint">
+                    سيظهر التقييم باسم <span className="font-black text-ink">{customer.name}</span> — والمنتج لازم يكون بطلباتك المُسلَّمة
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] font-bold text-blush-600">
+                    <Link href="/account" className="underline">سجّلي برقمك</Link> أولاً — التقييم للزبائن الذين استلموا الطلب
+                  </p>
+                )}
                 <div className="mt-3 flex items-center gap-1.5" dir="ltr">
                   {[1, 2, 3, 4, 5].map((i) => (
                     <button key={i} onClick={() => setRating(i)} className="transition-transform active:scale-75">
@@ -425,7 +430,6 @@ export function ProductView({
                     </button>
                   ))}
                 </div>
-                <input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder={customer?.name ?? "اسمج (اختياري)"} className="field mt-3 text-sm" />
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="شلون كانت الخامة والمقاس؟" rows={3} className="field mt-2 text-sm" />
                 <button onClick={submitReview} disabled={sending} className="mt-3 w-full rounded-2xl bg-ink py-3 text-sm font-black text-white transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50">
                   {sending ? "جاري النشر…" : "انشري التقييم"}

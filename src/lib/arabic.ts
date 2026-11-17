@@ -12,17 +12,21 @@ export function normalizeArabic(raw: string): string {
     .toLowerCase();
 }
 
-/** صيغ الكلمة المحتملة (حد أقصى 12 صيغة لتجنّب استعلام ضخم) */
+/**
+ * توليد صيغ الكلمة المحتملة (همزات/تاء مربوطة/ياء/واو) — حد أقصى 12 صيغة.
+ * الأهم: تُولَّد كل أشكال الحرف حتى لو كتب المستخدم شكلاً واحداً،
+ * فالبحث عن «اطفال» يجد «أطفال» والعكس.
+ */
 export function arabicVariants(raw: string): string[] {
   const base = normalizeArabic(raw);
   if (!base) return [];
 
   const groups: { re: RegExp; forms: string[] }[] = [
-    { re: /[أإآٱ]/, forms: ["ا", "أ", "إ", "آ"] },
-    { re: /ة/, forms: ["ة", "ه"] },
-    { re: /ى/, forms: ["ى", "ي"] },
-    { re: /ؤ/, forms: ["ؤ", "و"] },
-    { re: /ئ/, forms: ["ئ", "ي"] },
+    { re: /[أإآٱا]/, forms: ["ا", "أ", "إ", "آ"] },
+    { re: /[ةه]/, forms: ["ة", "ه"] },
+    { re: /[ىي]/, forms: ["ي", "ى"] },
+    { re: /[ؤو]/, forms: ["و", "ؤ"] },
+    { re: /[ئي]/, forms: ["ي", "ئ"] },
   ];
 
   let variants = new Set<string>([base]);

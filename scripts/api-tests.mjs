@@ -863,6 +863,39 @@ async function run() {
     return `${plain.products.length} نتيجة بالصيغتين ✓`;
   });
 
+  // 53) التقييم: بعد استلام الطلب فقط، وباسم الحساب، ومرة واحدة لكل زبون
+  await test("تقييم موثّق بعد الشراء (مرة واحدة)", async () => {
+    const anon = await fetch(`${BASE}/api/reviews`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ productId: idemP.id, rating: 5, comment: "بدون حساب" }),
+    });
+    assert(anon.status === 401, `anon review got ${anon.status}`);
+
+    const notBought = await fetch(`${BASE}/api/reviews`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: custCookie },
+      body: JSON.stringify({ productId: 999999, rating: 5, comment: "منتج غير مشترى" }),
+    });
+    assert(notBought.status === 403, `unbought review got ${notBought.status}`);
+
+    const ok = await fetch(`${BASE}/api/reviews`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: custCookie },
+      body: JSON.stringify({ productId: idemP.id, rating: 5, comment: "خامة ممتازة والمقاس مضبوط" }),
+    }).then(j);
+    assert(ok.ok && ok.author, JSON.stringify(ok));
+
+    const again = await fetch(`${BASE}/api/reviews`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: custCookie },
+      body: JSON.stringify({ productId: idemP.id, rating: 4, comment: "تعديل التقييم بعد التجربة" }),
+    }).then(j);
+    assert(again.ok, JSON.stringify(again));
+    assert(again.reviewsCount === ok.reviewsCount, `duplicate review counted: ${ok.reviewsCount} -> ${again.reviewsCount}`);
+    return `تقييم باسم ${ok.author} بدون تكرار ✓`;
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

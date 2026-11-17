@@ -10,6 +10,7 @@ import {
   numeric,
   index,
   primaryKey,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 /* ───────────────────────── catalog ───────────────────────── */
@@ -58,16 +59,22 @@ export const products = pgTable(
 
 export type ProductRow = typeof products.$inferSelect;
 
-export const reviews = pgTable("reviews", {
-  id: serial("id").primaryKey(),
-  productId: integer("product_id")
-    .references(() => products.id, { onDelete: "cascade" })
-    .notNull(),
-  author: varchar("author", { length: 120 }).notNull(),
-  rating: integer("rating").notNull(),
-  comment: text("comment").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const reviews = pgTable(
+  "reviews",
+  {
+    id: serial("id").primaryKey(),
+    productId: integer("product_id")
+      .references(() => products.id, { onDelete: "cascade" })
+      .notNull(),
+    author: varchar("author", { length: 120 }).notNull(),
+    /** هاتف صاحب التقييم — يمنع تكرار التقييم لنفس المنتج ويُثبت الشراء */
+    phone: varchar("phone", { length: 20 }),
+    rating: integer("rating").notNull(),
+    comment: text("comment").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("reviews_product_phone_idx").on(t.productId, t.phone)]
+);
 
 export type ReviewRow = typeof reviews.$inferSelect;
 
