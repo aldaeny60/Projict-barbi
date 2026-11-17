@@ -102,19 +102,24 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 
 ## 4. بوابات الدفع العراقية
 
-**حالة صريحة:** لا يقرأ الكود أي متغير من متغيرات البوابات بعد. الواجهة تعرض البوابات، والطلب الويب يُسجَّل `gateway_pending`، ويُنسَّق الدفع مع الزبون هاتفياً/واتساب. الربط الفعلي يحتاج اعتماد التاجر ثم مسار `init`/`callback` لكل بوابة على الخادم (حتى لا تتسرب الأسرار للمتصفح):
+**حالة صريحة:** طبقة الدفع مبنية ومُختبرة، لكنها لا تعمل إلا بعد ضبط اعتماد التاجر. بلا اعتماد:
+`POST /api/payments/init` يرد **503** برسالة واضحة، والطلب يبقى `unpaid` (والدفع عند الاستلام متاح دائماً).
 
-| البوابة | متغيرات البيئة (للتوثيق — غير مقروءة بعد) | الملاحظات عند الربط |
+| البوابة | الحالة | المتغيرات |
 |---|---|---|
-| زين كاش (رئيسية) | `ZAINCASH_MSISDN`, `ZAINCASH_MERCHANT_ID`, `ZAINCASH_SECRET` | POST initiation إلى `test.zaincash.iq/transaction/init` ثم إعادة توجيه |
-| FIB | `FIB_CLIENT_ID`, `FIB_CLIENT_SECRET` | OAuth بسيط + QR/payment API على `fib.iq` |
-| كي كارد | `QICARD_API_KEY`, `QICARD_TERMINAL_ID` | بوابة MasterCard Iraq |
-| آسيا حوالة | `ASIAHAWALA_MERCHANT`, `ASIAHAWALA_SECRET` | تحويل رصيد مع رقم مرجع |
-| فاست باي | `FASTPAY_STORE_ID`, `FASTPAY_PASSWORD` | Payment request + callback |
-| هواوي باي | `HUAWEI_PAY_MERCHANT_ID`, `HUAWEI_PAY_KEY_ID` | تكامل In-App/NFC |
-| الدفع عند الاستلام | — | الخيار الافتراضي الأكثر شيوعاً؛ تأكيد هاتفي قبل الشحن |
+| زين كاش | **مربوطة** (JWT HS256 + init + callback) | `ZAINCASH_MSISDN`, `ZAINCASH_MERCHANT_ID`, `ZAINCASH_SECRET`, `ZAINCASH_BASE_URL` (افتراضي: test.zaincash.iq) |
+| مزوّد اختبار (sandbox) | للاختبار فقط، لا يحصّل مالاً | `PAYMENT_SANDBOX=1` |
+| FIB / كي كارد / آسيا حوالة / فاست باي / هواوي باي | **غير مربوطة** — تحتاج اعتماد تاجر ثم مسار init/callback مثل زين كاش | متغيراتها في `.env.example` للتوثيق |
+| الدفع عند الاستلام | يعمل بلا أي اعتماد | — |
 
-عند ربط أي بوابة: الفاتورة تُصدر فوراً، ويُرسل SMS للزبون عند تهيئة المزود (وإلا `skipped` بصراحة)، مع نسخة واتساب جاهزة (`wa.me`).
+### مسار الدفع
+1. `POST /api/orders` يُنشئ الطلب بحالة دفع `unpaid`.
+2. `POST /api/payments/init {orderId, provider}` يُنشئ سجل دفع `pending` ويعيد `redirectUrl`.
+3. البوابة تعيد الزبون إلى `GET|POST /api/payments/callback/<provider>` بتوكن موقّع.
+4. الخادم يتحقق من **التوقيع والمبلغ** قبل تغيير الحالة: مبلغ غير مطابق = `failed`، توقيع خاطئ = لا تغيير.
+5. الزبون يرى صفحة `/checkout/payment?status=paid|failed|invalid`.
+
+ضمانات: لا يُعلن الطلب مدفوعاً إلا بتوقيع صحيح ومبلغ مطابق، والإشعار idempotent (تكراره لا يغيّر شيئاً)، وكل محاولة تُسجَّل في سجل التدقيق.
 
 ### مصدر المتغيرات
 كل قراءة لمتغيرات البيئة على الخادم تمر عبر `src/lib/env.ts` (قاعدة البيانات، الإدارة، الجلسات، SMS، Upstash، Serper، وضع العرض). الاستثناءات: `NEXT_PUBLIC_*` في `src/lib/site.ts` لأن Next يحقنها وقت البناء، و`NODE_ENV` في مكوّن عميل، و`drizzle.config.ts` مع سكربتات التشغيل.

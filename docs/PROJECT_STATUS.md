@@ -34,7 +34,7 @@
 | فلاتر المتجر | VERIFIED | سعر/مقاس/لون + ترقيم `offset` (QA 38) |
 | السياسات | VERIFIED | صفحات إرجاع/خصوصية/شروط + روابط الفوتر (QA 39) |
 | رصد السوق | VERIFIED | Serper |
-| الدفع الحي المباشر | BLOCKED | يتطلب اعتمادات إنتاج (لا تزوير — LAW 011/012) |
+| الدفع الحي المباشر | VERIFIED (زين كاش) / BLOCKED (بقية البوابات) | init + callback موقّع + مطابقة مبلغ (QA 57)؛ التفعيل يحتاج اعتماد تاجر |
 | SMS الحي | BLOCKED | مزود عراقي خارجي؛ بلا مزود يفشل OTP بصراحة في الإنتاج |
 | إشعارات Push (FCM) | NOT STARTED | يحتاج مفاتيح مشروع Firebase وكود إرسال |
 | حد المعدل المشترك | VERIFIED (REST) | Upstash عبر REST عند ضبطه، وإلا ذاكرة كل نسخة |
@@ -54,5 +54,5 @@
 
 
 ## التحقق
-`scripts/api-tests.mjs`: 56 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `6f04896` (job 134189744473).
+`scripts/api-tests.mjs`: 57 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `09b9143` (job 134233644139).
 

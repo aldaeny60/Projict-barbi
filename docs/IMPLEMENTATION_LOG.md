@@ -40,3 +40,4 @@
 - API خارجي بمفاتيح: `api_keys` (هاش SHA-256 فقط) + `/api/v1/products` و`/api/v1/categories` للقراءة فقط، بحد 120/دقيقة لكل مفتاح وإبطال فوري، ولا سعر تكلفة في الاستجابة. (VERIFIED — QA 55)
 - تشغيل وأمان: بحث الطلبات بكود/هاتف/اسم، ترويسات CSP وCOOP، فهارس `products(price, created_at)` و`orders(status)` و`reviews(product_id)`، وسكربت `restore.sh` آمن. (VERIFIED — QA 56)
 - التهيئة من داخل المشروع: `.env` محلي مولّد بأسرار جلسات عشوائية و`ADMIN_PIN` غير افتراضي (مستثنى من Git)، و`assertRuntimeConfig()` في `src/instrumentation.ts` يرفض الإقلاع في الإنتاج برمز `2024` أو بلا أسرار، و`npm run env:check` للفحص المسبق. (VERIFIED — CI ناجح على 245c715)
+- دفع إلكتروني: جدول `payments` + `orders.payment_status`، زين كاش (JWT HS256 بلا مكتبات + init + callback)، مزوّد sandbox للاختبار، تحقق توقيع ومبلغ قبل إعلان الدفع، idempotent، وصفحة نتيجة عربية. (VERIFIED — QA 57)
