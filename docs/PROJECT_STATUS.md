@@ -19,6 +19,7 @@
 | كوبونات لكل زبون | VERIFIED | `oncePerCustomer` يُفحص برقم الهاتف في الطلب والتحقق (QA 48) |
 | إشعار تغيير الحالة | VERIFIED | SMS عند تهيئة المزود، و`notified` صريح في الرد (QA 47) |
 | تصدير التقارير | VERIFIED | CSV للطلبات والزبائن محمي بالإدارة (QA 49) |
+| التشغيل والنشر | VERIFIED (ملفات) | `docker-compose.yml` + `scripts/backup.sh` + سكربتات db:generate/migrate |
 | الزبائن (CRM) | VERIFIED | قائمة بعدد الطلبات والإنفاق وآخر طلب (QA 37) |
 | فلاتر المتجر | VERIFIED | سعر/مقاس/لون + ترقيم `offset` (QA 38) |
 | السياسات | VERIFIED | صفحات إرجاع/خصوصية/شروط + روابط الفوتر (QA 39) |

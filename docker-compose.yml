@@ -1,0 +1,43 @@
+# باربي — حزمة نشر محلية/سيرفر: PostgreSQL + التطبيق
+# الاستخدام: cp .env.example .env  ثم  docker compose up -d --build
+# ملاحظة: DATABASE_URL داخل التطبيق يجب أن يشير إلى الخدمة db وليس 127.0.0.1.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-app_db}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app_db}
+      NODE_ENV: production
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
+      ADMIN_PIN: ${ADMIN_PIN:?ADMIN_PIN مطلوب}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?ADMIN_SESSION_SECRET مطلوب}
+      CUSTOMER_SESSION_SECRET: ${CUSTOMER_SESSION_SECRET:-}
+      STAFF_SESSION_SECRET: ${STAFF_SESSION_SECRET:-}
+      SMS_PROVIDER_URL: ${SMS_PROVIDER_URL:-}
+      SMS_PROVIDER_API_KEY: ${SMS_PROVIDER_API_KEY:-}
+      SERPER_API_KEY: ${SERPER_API_KEY:-}
+      UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL:-}
+      UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN:-}
+    ports:
+      - "3000:3000"
+
+volumes:
+  db_data:

@@ -106,12 +106,13 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 
 ## 5. خطة النشر
 
-1. **سيرفر**: VPS العراق/المنطقة (أو AWS me-south) — Docker: Next.js + Postgres خلف Nginx مع SSL (Let's Encrypt) — البودات كلها HTTPS. صورة `Dockerfile` جاهزة.
+1. **سيرفر**: `docker compose up -d --build` (PostgreSQL + التطبيق) خلف Nginx مع SSL (Let's Encrypt). الملف `docker-compose.yml` جاهز ويقرأ `.env`.
 2. **سكالبج**: نسخة واحدة تكفي في البداية؛ عند التعدد اضبط `UPSTASH_REDIS_REST_URL/TOKEN` ليكون حد المعدل مشتركاً، ثم Kubernetes.
 3. **iOS/Android**: كود Flutter موحد يستهلك نفس الـ API ويفتح عبر App Store Connect وPlay Console (أسماء: "باربي BARBI"). حتى الإطلاق، الـ PWA يعطي نفس التجربة: "إضافة إلى الشاشة الرئيسية".
 4. **إشعارات Push**: لم تُنفّذ بعد — تحتاج مفاتيح Firebase وكود إرسال (لا توجد متغيرات معلنة بلا كود).
-5. **النسخ الاحتياطي**: `pg_dump` يومي إلى تخزين خارجي.
+5. **النسخ الاحتياطي**: `./scripts/backup.sh` ينسخ ويضغط ويتحقق من الملف ويحفظ آخر 14 نسخة — جدوله يومياً (cron).
 6. **المراقبة**: Sentry/uptime + تنبيه على `audit_logs` (محاولات دخول فاشلة متكررة).
+7. **المخطط**: `npm run db:generate` ثم `npm run db:migrate` على قاعدة فيها بيانات (بدل `push`).
 
 ## 6. خصوصية السوق العراقي (مطبقة)
 

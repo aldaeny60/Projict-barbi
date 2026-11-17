@@ -55,3 +55,14 @@ curl -X POST http://localhost:3000/api/seed   # بذر البيانات: منت�
 ## الوثائق
 
 - `docs/DOCS.md` — توثيق API الكامل، إعداد بوابات الدفع، خطة النشر على App Store/Google Play/السيرفر.
+
+## التشغيل والنشر
+
+```bash
+docker compose up -d --build     # PostgreSQL + التطبيق (يقرأ .env)
+./scripts/backup.sh              # نسخة احتياطية مضغوطة + تشذيب آخر 14 يومياً
+```
+
+- `Dockerfile` لصورة التطبيق، و`docker-compose.yml` للتطوير/السيرفر الصغير.
+- عند نمو المخطط: `npm run db:generate` لإنشاء ملفات migrations، ثم `npm run db:migrate` بدل `push` على قاعدة فيها بيانات.
+- النسخ الاحتياطي يحتاج `pg_dump` على الجهاز وعلى جدولة يومية (cron) في الإنتاج.
