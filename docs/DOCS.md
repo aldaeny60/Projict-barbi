@@ -80,6 +80,7 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 - `POST /api/admin/stats {status}` — قائمة الطلبات المفلترة. `PATCH` — `{productId, add}` لإعادة التخزين.
 - `GET/POST/PATCH/DELETE /api/admin/staff` — حسابات الموظفين: الاسم والدور والفرع ورمز PIN (4–8 أرقام، يُخزَّن scrypt). لا يُعاد أي hash.
 - `GET /api/admin/customers?q=` — الزبائن مع عدد الطلبات والإنفاق الصافي وآخر طلب.
+- `GET /api/admin/export?type=orders|customers` — CSV (UTF-8 مع BOM لـ Excel) للطلبات أو الزبائن، للإدارة فقط، ويُسجَّل في التدقيق.
 - `GET /api/admin/audit?limit=&q=` — سجل التدقيق (الأحدث أولاً، للقراءة فقط).
 - `POST /api/uploads` — رفع صورة منتج (multipart، JPG/PNG/WebP حتى 6MB) → `/api/uploads/[id]`.
 

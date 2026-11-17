@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Package, ShoppingBag, TicketPercent, Truck, Boxes, Store,
   Lock, Loader2, Plus, Pencil, Trash2, X, Check, Search, AlertTriangle,
   TrendingUp, Banknote, ReceiptText, RefreshCcw, ChevronLeft, Star, Globe,
-  Users, ScrollText, Upload, RotateCcw,
+  Users, ScrollText, Upload, RotateCcw, Download,
 } from "lucide-react";
 import { MarketSearchTab } from "@/components/AdminMarketSearch";
 import type { CategoryDTO, CouponDTO, DeliveryFeeDTO, OrderDTO, ProductDTO } from "@/lib/types";
@@ -650,11 +650,16 @@ function OrdersTab() {
 
   return (
     <div>
-      <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-        {[{ k: "all", l: "الكل" }, ...ORDER_STATUSES.map((s) => ({ k: s, l: orderStatusLabel(s) }))].map((s) => (
-          <button key={s.k} onClick={() => setFilter(s.k)}
-            className={`shrink-0 rounded-full px-3.5 py-2 text-[11px] font-black ${filter === s.k ? "bg-ink text-white" : "bg-white text-ink-soft shadow-soft"}`}>{s.l}</button>
-        ))}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          {[{ k: "all", l: "الكل" }, ...ORDER_STATUSES.map((s) => ({ k: s, l: orderStatusLabel(s) }))].map((s) => (
+            <button key={s.k} onClick={() => setFilter(s.k)}
+              className={`shrink-0 rounded-full px-3.5 py-2 text-[11px] font-black ${filter === s.k ? "bg-ink text-white" : "bg-white text-ink-soft shadow-soft"}`}>{s.l}</button>
+          ))}
+        </div>
+        <a href="/api/admin/export?type=orders" className="flex shrink-0 items-center gap-1.5 rounded-full bg-minty-100 px-3.5 py-2 text-[11px] font-black text-minty-700">
+          <Download size={13} /> تصدير CSV
+        </a>
       </div>
       <div className="space-y-2.5">
         {orders === null && <div className="shimmer h-40 rounded-3xl" />}
@@ -787,7 +792,7 @@ function OrdersTab() {
 /* ═══ coupons ═══ */
 function CouponsTab() {
   const [coupons, setCoupons] = useState<CouponDTO[] | null>(null);
-  const [form, setForm] = useState({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "", oncePerCustomer: false });
+  const [form, setForm] = useState({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "", oncePerCustomer: false, expiresAt: "" });
   const load = useCallback(() => fetch("/api/coupons").then((r) => r.json()).then((d) => setCoupons(d.coupons ?? [])).catch(() => setCoupons([])), []);
   useEffect(() => { load(); }, [load]);
 
@@ -806,6 +811,7 @@ function CouponsTab() {
                 <p className="text-[10px] font-bold text-ink-faint">
                   الاستخدام: {formatNum(c.usedCount ?? 0)} / {c.maxUses ?? "∞"}
                   {c.oncePerCustomer ? " • مرة واحدة لكل زبون" : ""}
+                  {c.expiresAt ? ` • ينتهي ${c.expiresAt.slice(0, 10)}` : ""}
                 </p>
               </div>
             </div>
@@ -852,6 +858,7 @@ function CouponsTab() {
           <input value={form.minSubtotal} onChange={(e) => setForm({ ...form, minSubtotal: e.target.value.replace(/[^\d]/g, "") })} placeholder="الحد الأدنى للطلب (د.ع)" className="field text-sm" dir="ltr" inputMode="numeric" />
           <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="وصف قصير" className="field text-sm" />
           <input value={form.maxUses} onChange={(e) => setForm({ ...form, maxUses: e.target.value.replace(/[^\d]/g, "") })} placeholder="حد الاستخدام — فارغ = بلا حد" className="field text-sm" dir="ltr" inputMode="numeric" />
+          <input value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} type="date" className="field text-sm font-black" dir="ltr" />
           <button
             type="button"
             onClick={() => setForm({ ...form, oncePerCustomer: !form.oncePerCustomer })}
@@ -862,7 +869,7 @@ function CouponsTab() {
           <button onClick={async () => {
             if (!form.code || !form.value) return;
             await fetch("/api/coupons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, value: Number(form.value), minSubtotal: Number(form.minSubtotal) || 0 }) });
-            setForm({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "", oncePerCustomer: false });
+            setForm({ code: "", type: "percent", value: "", minSubtotal: "", description: "", maxUses: "", oncePerCustomer: false, expiresAt: "" });
             load();
           }} className="w-full rounded-2xl bg-ink py-3 text-sm font-black text-white transition-transform hover:scale-[1.02]">إنشاء</button>
         </div>
@@ -1314,6 +1321,9 @@ function CustomersTab() {
           <Search size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-faint" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="بحث بالاسم أو الهاتف..." className="field pr-10 py-2.5 text-sm" />
         </div>
+        <a href="/api/admin/export?type=customers" className="flex items-center gap-1.5 rounded-full bg-minty-100 px-3.5 py-2 text-[11px] font-black text-minty-700">
+          <Download size={13} /> تصدير CSV
+        </a>
         <button onClick={() => load(q.trim())} className="rounded-2xl bg-ink px-4 py-2.5 text-xs font-black text-white transition-transform hover:scale-105">بحث</button>
       </div>
 

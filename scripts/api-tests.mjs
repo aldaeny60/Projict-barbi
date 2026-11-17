@@ -68,12 +68,14 @@ async function run() {
     return `customer #${r.customer.id}`;
   });
 
-  let product;
+  let product, leadSize;
   // 4) تصفح المنتجات
   await test("تصفح الكتالوج", async () => {
     const r = await fetch(`${BASE}/api/products?limit=100`).then(j);
     assert(r.products.length >= 20, "catalog too small");
-    product = r.products.find((p) => p.stock > 3) || r.products[0];
+    product = r.products.find((p) => (p.sizeStock ?? []).some((s) => s.stock >= 4)) || r.products[0];
+    // المقاس الأوفر — به تُختبر الكميات الكبيرة بدل الاعتماد على أول مقاس
+    leadSize = (product.sizeStock ?? []).slice().sort((a, b) => b.stock - a.stock)[0]?.size ?? product.sizes[0];
     assert(product.images.length >= 4, "need >=4 images");
     return `${r.products.length} منتج`;
   });
@@ -117,7 +119,7 @@ async function run() {
     const r = await fetch(`${BASE}/api/orders`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
       customerName: "عميل QA", phone: QA_PHONE, governorate: "بغداد", district: "المنصور",
       address: "قرب QA", paymentMethod: "cod", couponCode: "WELCOME10",
-      items: [{ productId: product.id, qty: 2, size: product.sizes[0], color: product.colors[0].name }],
+      items: [{ productId: product.id, qty: 2, size: leadSize, color: product.colors[0].name }],
     }) }).then(j);
     assert(r.ok, r.error);
     const inv = r.invoice;
@@ -224,7 +226,7 @@ async function run() {
     const half = Math.ceil(total / 2);
     const r = await fetch(`${BASE}/api/pos/sale`, { method: "POST", headers: { "Content-Type": "application/json", cookie: staffCookie }, body: JSON.stringify({
       branchId: 1, staffName: "QA-BOT",
-      items: [{ productId: product.id, qty, size: product.sizes[0], color: product.colors[0].name }],
+      items: [{ productId: product.id, qty, size: leadSize, color: product.colors[0].name }],
       payments: [{ method: "cash", amount: half }, { method: "zaincash", amount: total - half }],
     }) }).then(j);
     assert(r.ok, r.error);
@@ -431,10 +433,11 @@ async function run() {
   });
 
   // 33) idempotency: نفس المفتاح لا يُنشئ طلبين ولا يخصم المخزون مرتين
-  let idemOrderId = null, idemStockBefore = 0, idemP = null, deliveredStock = 0;
+  let idemOrderId = null, idemStockBefore = 0, idemP = null, idemSize = null, deliveredStock = 0;
   await test("منع تكرار الطلب (idempotency)", async () => {
     const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
-    idemP = all.products.find((x) => x.stock >= 5) || product;
+    idemP = all.products.find((x) => (x.sizeStock ?? []).some((s) => s.stock >= 2)) || product;
+    idemSize = (idemP.sizeStock ?? []).find((s) => s.stock >= 2)?.size ?? idemP.sizes[0];
     idemStockBefore = idemP.stock;
     const payload = {
       customerName: "QA idem",
@@ -442,7 +445,7 @@ async function run() {
       governorate: "بغداد",
       address: "QA idem",
       requestId: `QA-IDEM-${Date.now()}`,
-      items: [{ productId: idemP.id, qty: 2, size: idemP.sizes[0], color: idemP.colors[0]?.name }],
+      items: [{ productId: idemP.id, qty: 2, size: idemSize, color: idemP.colors[0]?.name }],
     };
     const a = await fetch(`${BASE}/api/orders`, { method: "POST", headers: jsonHeaders, body: JSON.stringify(payload) }).then(j);
     const b = await fetch(`${BASE}/api/orders`, { method: "POST", headers: jsonHeaders, body: JSON.stringify(payload) }).then(j);
@@ -580,12 +583,13 @@ async function run() {
   await test("منع تكرار فاتورة الكاشير (idempotency)", async () => {
     assert(staffCookie, "no staff session");
     const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
-    const p = all.products.find((x) => x.stock >= 3);
+    const p = all.products.find((x) => (x.sizeStock ?? []).some((s) => s.stock >= 1));
     assert(p, "no stock for pos idempotency");
+    const sz = (p.sizeStock ?? []).find((s) => s.stock >= 1).size;
     const before = p.stock;
     const payload = {
       requestId: `QA-POS-${Date.now()}`,
-      items: [{ productId: p.id, qty: 1, size: p.sizes[0], color: p.colors[0]?.name }],
+      items: [{ productId: p.id, qty: 1, size: sz, color: p.colors[0]?.name }],
       payments: [{ method: "cash", amount: 999999999 }],
     };
     const a = await fetch(`${BASE}/api/pos/sale`, {
@@ -700,8 +704,9 @@ async function run() {
   // 47) تغيير الحالة يُرجع نتيجة إشعار الزبون صريحة
   await test("إشعار الزبون عند تغيير الحالة", async () => {
     const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
-    const p = all.products.find((x) => x.stock >= 2);
+    const p = all.products.find((x) => (x.sizeStock ?? []).some((s) => s.stock >= 2));
     assert(p, "no stock");
+    const sz = (p.sizeStock ?? []).find((s) => s.stock >= 2).size;
     const created = await fetch(`${BASE}/api/orders`, {
       method: "POST",
       headers: jsonHeaders,
@@ -710,7 +715,7 @@ async function run() {
         phone: QA_PHONE,
         governorate: "بغداد",
         address: "QA notify",
-        items: [{ productId: p.id, qty: 1, size: p.sizes[0], color: p.colors[0]?.name }],
+        items: [{ productId: p.id, qty: 1, size: sz, color: p.colors[0]?.name }],
       }),
     }).then(j);
     assert(created.ok, JSON.stringify(created));
@@ -735,8 +740,9 @@ async function run() {
     assert(created.coupon?.oncePerCustomer === true, JSON.stringify(created));
 
     const all = await fetch(`${BASE}/api/products?limit=100`).then(j);
-    const p = all.products.find((x) => x.stock >= 3);
+    const p = all.products.find((x) => (x.sizeStock ?? []).some((s) => s.stock >= 3));
     assert(p, "no stock for coupon test");
+    const sz = (p.sizeStock ?? []).find((s) => s.stock >= 3).size;
     const order = () =>
       fetch(`${BASE}/api/orders`, {
         method: "POST",
@@ -747,7 +753,7 @@ async function run() {
           governorate: "بغداد",
           address: "QA coupon",
           couponCode: code,
-          items: [{ productId: p.id, qty: 1, size: p.sizes[0], color: p.colors[0]?.name }],
+          items: [{ productId: p.id, qty: 1, size: sz, color: p.colors[0]?.name }],
         }),
       }).then(j);
 
@@ -763,6 +769,22 @@ async function run() {
     }).then(j);
     assert(v.valid === false, "validate accepted a used once-per-customer coupon");
     return "خصم أول 500 ثم 0 ✓";
+  });
+
+  // 49) تصدير CSV محمي بالإدارة ويحتوي بيانات فعلية
+  await test("تصدير CSV محمي ويحتوي بيانات", async () => {
+    const anon = await fetch(`${BASE}/api/admin/export?type=orders`);
+    assert(anon.status === 401, `anon export got ${anon.status}`);
+
+    const r = await fetch(`${BASE}/api/admin/export?type=orders`, { headers: { cookie: adminCookie } });
+    assert(r.ok, `export got ${r.status}`);
+    const body = await r.text();
+    assert(body.includes("الكود") && body.includes("SG-"), "orders csv missing data");
+    assert((r.headers.get("content-type") || "").includes("text/csv"), "wrong content-type");
+
+    const c = await fetch(`${BASE}/api/admin/export?type=customers`, { headers: { cookie: adminCookie } }).then((x) => x.text());
+    assert(c.includes("الهاتف") && c.includes(QA_PHONE), "customers csv missing QA phone");
+    return `${body.split("\r\n").length - 1} صف طلبات ✓`;
   });
 
   // ── النتائج ──
