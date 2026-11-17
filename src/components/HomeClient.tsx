@@ -148,7 +148,7 @@ export function HomeClient({
                   <motion.img
                     key={`img-${slide}`}
                     src={cur.img}
-                    alt=""
+                    alt={cur.title ?? "من تشكيلة باربي"}
                     initial={{ opacity: 0, scale: 0.9, rotate: -3 }}
                     animate={{ opacity: 1, scale: 1, rotate: 0 }}
                     exit={{ opacity: 0, scale: 0.94, rotate: 3 }}

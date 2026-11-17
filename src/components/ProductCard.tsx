@@ -76,7 +76,7 @@ export function ProductCard({ p, index = 0 }: { p: ProductDTO; index?: number })
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={p.images[1]}
-                alt=""
+                alt={`${p.name} — لقطة إضافية`}
                 loading="lazy"
                 className={`absolute inset-0 size-full object-cover transition-all duration-700 ${hovered ? "scale-105 opacity-100" : "scale-125 opacity-0"}`}
               />
