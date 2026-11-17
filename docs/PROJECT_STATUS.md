@@ -28,6 +28,11 @@
 | ترويسات الأمان | VERIFIED | CSP + COOP + HSTS في `next.config.ts` |
 | النسخ والاستعادة | VERIFIED (سكربت) | `backup.sh` + `restore.sh` بتأكيد صريح ومعاملة واحدة |
 | التهيئة (env) | VERIFIED | `.env` محلي بأسرار عشوائية ورمز إدارة غير افتراضي + تحقق إقلاع يرفض `2024` في الإنتاج + `npm run env:check` |
+| الدفع الإلكتروني | VERIFIED (كود) | زين كاش init + callback موقّع + تحقق مبلغ + idempotent؛ بلا اعتماد 503 صريح (QA 57) |
+| مطابقة الدفع يدوياً | VERIFIED | المالك يسجّل paid/failed بسبب إلزامي، مع حدث وتدقيق (QA 60) |
+| تحقق بخطوتين | VERIFIED | TOTP بلا مكتبات، تفعيل ذاتي وتصفير من المالك (QA 58) |
+| روابط دلالية وSEO | VERIFIED | slug للروابط + canonical + BreadcrumbList + sitemap (QA 59) |
+| تجربة الكاشير أوفلاين | VERIFIED | أسباب رفض المزامنة ظاهرة مع إعادة محاولة/حذف |
 | التشغيل والنشر | VERIFIED (ملفات) | `docker-compose.yml` + `scripts/backup.sh` + سكربتات db:generate/migrate |
 | حسابات الإدارة | VERIFIED | مالك/مدير برموز مُجزّأة، وكل إجراء منسوب لاسم صاحبه (QA 51) |
 | الزبائن (CRM) | VERIFIED | قائمة بعدد الطلبات والإنفاق وآخر طلب (QA 37) |
@@ -54,5 +59,5 @@
 
 
 ## التحقق
-`scripts/api-tests.mjs`: 57 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `09b9143` (job 134233644139).
+`scripts/api-tests.mjs`: 61 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `14f118e` (job 134364602064).
 

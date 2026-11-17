@@ -81,15 +81,18 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 - `POST /api/admin/stats {status}` — قائمة الطلبات المفلترة. `PATCH` — `{productId, add}` لإعادة التخزين.
 - `GET/POST/PATCH/DELETE /api/admin/api-keys` — مفاتيح API للقراءة (المالك فقط). المفتاح يُعرض مرة واحدة، ويُخزَّن هاشه فقط.
 
-### API خارجي (قراءة فقط)
-| Method | Path | الوصف |
+### API خارجي (قراءة فقط)| Method | Path | الوصف |
 |---|---|---|
 | GET | `/api/v1/products` | كتالوج عام بمفتاح API: نفس فلاتر المتجر (section/category/q/sort/minPrice/maxPrice/size/color/limit/offset). لا يعيد `costPrice` ولا بيانات زبائن |
 | GET | `/api/v1/categories` | التصنيفات العامة |
 
 المصادقة: `Authorization: Bearer <key>` أو `x-api-key: <key>`. الحد 120 طلباً/دقيقة لكل مفتاح. المفتاح يُنشأ من `/admin` ← «مفاتيح API»، والإبطال فوري.
 - `POST /api/admin/login {name?, pin}` — باسم حساب إداري تُبنى الجلسة باسمه ودوره؛ وبلا اسم يُقبل `ADMIN_PIN` كمالك. `DELETE` خروج.
-- `GET/POST/PATCH/DELETE /api/admin/users` — حسابات الإدارة (المالك فقط): اسم + رمز PIN + دور (owner/manager). آخر مالك مفعّل محمي من الحذف/الإيقاف، والمدير يحصل 403.
+- `GET/POST/PATCH/DELETE /api/admin/users` — حسابات الإدارة (المالك فقط): اسم + رمز PIN + دور (owner/manager). آخر مالك مفعّل محمي من الحذف/الإيقاف، والمدير يحصل 403. `resetTwoFactor` يصفر التحقق بخطوتين لمن فقد جهازه.
+- `POST|PUT|DELETE /api/admin/2fa` — التحقق بخطوتين (TOTP) لحساب الجلسة: بدء السرّ (إرجاع `otpauth://`)، تفعيل برمز 6 أرقام، وتعطيل يتطلب رمزاً صالحاً.
+- `POST /api/admin/payments` — **مطابقة دفع يدوية** (المالك): `{orderId, status: paid|failed, note, providerRef?}` بسبب إلزامي، داخل معاملة، مع حدث في الطلب وتدقيق، و409 للتكرار. `GET ?orderId=` يعرض محاولات الدفع.
+- `GET /api/track` — بجلسة OTP: كل طلبات الزبون مع `events`. بلا جلسة: `?phone=&code=` ورد مخفّف فيه `history` بلا اسم أو عنوان أو إجمالي.
+- `GET /api/orders/by-code/[code]` — معرّف الطلب وحالة دفعه لصاحب الجلسة فقط (لإعادة محاولة الدفع من صفحة النتيجة).
 - `GET/POST/PATCH/DELETE /api/admin/staff` — حسابات الموظفين: الاسم والدور والفرع ورمز PIN (4–8 أرقام، يُخزَّن scrypt). لا يُعاد أي hash.
 - `GET /api/admin/customers?q=` — الزبائن مع عدد الطلبات والإنفاق الصافي وآخر طلب.
 - `GET /api/admin/export?type=orders|customers` — CSV (UTF-8 مع BOM لـ Excel) للطلبات أو الزبائن، للإدارة فقط، ويُسجَّل في التدقيق.
