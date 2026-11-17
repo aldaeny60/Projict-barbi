@@ -53,7 +53,8 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 | POST | `/api/orders/[id]/returns` | إرجاع جزئي/كامل بعد التسليم — `{items:[{orderItemId, qty}], reason?}` → `{refund, fullyReturned, order}`. يرفض الكمية فوق المتبقي (409) ويُعيد مخزون الجزء المسترجع فقط |
 | GET | `/api/orders/[id]` | تفاصيل الطلب (مالكه أو الإدارة/الكاشير) مع `events` و`returns` و`refundTotal` |
 | GET | `/api/products` | فلاتر: `section`, `category`, `q`, `sort`, `deals`, `new`, `minPrice`, `maxPrice`, `size`, `color`, `limit`, `offset` — و`total` هو عدد النتائج المطابقة. كل منتج يحمل `sizeStock:[{size,stock}]` |
-| PATCH | `/api/products/[id]` | تعديل منتج؛ تمرير `sizeStock:[{size,stock}]` يضبط رصيد كل مقاس ويجعل `stock` = مجموعها. تعديل `stock` وحده يوزّع الفرق على المقاسات |
+| PATCH | `/api/products/[id]` | تعديل منتج؛ تمرير `sizeStock:[{size,stock}]` يضبط رصيد كل مقاس ويجعل `stock` = مجموعها. تعديل `stock` وحده يوزّع الفرق على المقاسات. `costPrice` (سعر التكلفة) مقبول هنا وللإدارة فقط |
+| GET | `/api/admin/stats` | بطاقات تشمل `profit` (ربح تقديري 30 يوماً بعد خصم المسترجع) و`marginPct` — يُحسبان من لقطة تكلفة وقت البيع |
 | POST | `/api/coupons/validate` | `{code, subtotal}` → `{valid, discount, message}` |
 | GET/POST/PATCH/DELETE | `/api/coupons` | إدارة الكوبونات |
 | GET/PATCH | `/api/delivery` | رسوم التوصيل لكل محافظة |

@@ -67,7 +67,11 @@ export async function GET(req: NextRequest) {
     .offset(offset);
 
   const sizeMap = await sizeStockMap(rows.map((p) => p.id));
-  let dtos = rows.map((p) => toProductDTO(p, catById.get(p.categoryId), sizeMap.get(p.id)));
+  // التكلفة تُعاد للإدارة فقط — لا تتسرب للكتالوج العام
+  const includeCost = isAdminAuthed(req);
+  let dtos = rows.map((p) =>
+    toProductDTO(p, catById.get(p.categoryId), sizeMap.get(p.id), includeCost)
+  );
   if (sort === "deals" || deals) {
     dtos = dtos.sort((a, b) => (b.discountPct ?? 0) - (a.discountPct ?? 0) || b.soldCount - a.soldCount);
   }
@@ -98,6 +102,7 @@ export async function POST(req: NextRequest) {
         name: body.name,
         description: body.description ?? "",
         price: Math.round(Number(body.price)),
+        costPrice: Math.max(0, Math.round(Number(body.costPrice ?? 0))),
         compareAtPrice: body.compareAtPrice ? Math.round(Number(body.compareAtPrice)) : null,
         images: Array.isArray(body.images) ? body.images.filter(Boolean) : [],
         colors: Array.isArray(body.colors) ? body.colors : [],

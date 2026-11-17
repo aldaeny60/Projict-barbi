@@ -33,6 +33,8 @@ export type ProductDTO = {
   section: "boys" | "girls" | "newborn";
   /** مخزون كل مقاس — مجموعه يساوي stock */
   sizeStock?: { size: string; stock: number }[];
+  /** سعر التكلفة — يُرجع للإدارة فقط */
+  costPrice?: number;
 };
 
 export type ReviewDTO = {

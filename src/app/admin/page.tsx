@@ -24,6 +24,7 @@ type Stats = {
   cards: {
     todayRevenue: number; todayOrders: number; monthRevenue: number; monthOrders: number;
     avgOrder: number; pendingOrders: number; returns: number; webTotal: number; posTotal: number;
+    profit: number; marginPct: number;
   };
   series: { day: string; label: string; total: number; count: number }[];
   payments: { id: string; name: string; value: number }[];
@@ -216,10 +217,11 @@ function Overview({ stats }: { stats: Stats | null }) {
   const c = stats.cards;
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         {[
           { label: "مبيعات اليوم", value: formatIQD(c.todayRevenue), sub: `${c.todayOrders} فاتورة`, icon: TrendingUp, tint: "from-minty-200 to-aqua-200" },
           { label: "مبيعات الشهر", value: formatIQD(c.monthRevenue), sub: `${c.monthOrders} طلب`, icon: Banknote, tint: "from-blush-200 to-lilac-200" },
+          { label: "الربح التقديري", value: formatIQD(c.profit), sub: `هامش ${c.marginPct}% — 30 يوم`, icon: TrendingUp, tint: "from-minty-200 to-lilac-200" },
           { label: "متوسط السلة", value: formatIQD(c.avgOrder), sub: "آخر 30 يوم", icon: ReceiptText, tint: "from-butter-200 to-blush-200" },
           { label: "بانتظار التأكيد", value: formatNum(c.pendingOrders), sub: `${c.returns} مرتجع`, icon: RefreshCcw, tint: "from-lilac-200 to-aqua-200" },
         ].map((k, i) => (
@@ -306,7 +308,7 @@ function Overview({ stats }: { stats: Stats | null }) {
 
 /* ═══ products ═══ */
 type ProductForm = {
-  id?: number; name: string; description: string; price: string; compareAtPrice: string;
+  id?: number; name: string; description: string; price: string; costPrice: string; compareAtPrice: string;
   stock: string; categoryId: number; images: string; sizes: string[]; colors: { name: string; hex: string }[]; isNew: boolean;
   /** مخزون كل مقاس — يُرسل للخادم ويحسب الإجمالي */
   sizeStock: Record<string, string>;
@@ -341,7 +343,7 @@ function ProductsTab() {
   const openNew = () => {
     const sizes = [...SIZES_ALL.slice(2, 8)];
     setEditing({
-      name: "", description: "", price: "", compareAtPrice: "", stock: "20",
+      name: "", description: "", price: "", costPrice: "", compareAtPrice: "", stock: "20",
       categoryId: cats[0]?.id ?? 1, images: "", sizes, colors: [ColorPalette[0]], isNew: true,
       sizeStock: distributeStock(20, sizes),
     });
@@ -352,6 +354,7 @@ function ProductsTab() {
     const fallback = distributeStock(p.stock, p.sizes);
     setEditing({
       id: p.id, name: p.name, description: p.description, price: String(p.price),
+      costPrice: p.costPrice !== undefined ? String(p.costPrice) : "",
       compareAtPrice: p.compareAtPrice ? String(p.compareAtPrice) : "", stock: String(p.stock),
       categoryId: p.categoryId, images: p.images.join("\n"), sizes: p.sizes, colors: p.colors, isNew: p.isNew,
       sizeStock: Object.fromEntries(p.sizes.map((s) => [s, String(rows.get(s) ?? fallback[s] ?? 0)])),
@@ -388,7 +391,8 @@ function ProductsTab() {
     }));
     const payload = {
       name: editing.name, description: editing.description,
-      price: Number(editing.price), compareAtPrice: editing.compareAtPrice ? Number(editing.compareAtPrice) : null,
+      price: Number(editing.price), costPrice: Math.max(0, Number(editing.costPrice) || 0),
+      compareAtPrice: editing.compareAtPrice ? Number(editing.compareAtPrice) : null,
       stock: sizeRows.length ? sizeRows.reduce((a, b) => a + b.stock, 0) : Number(editing.stock),
       categoryId: editing.categoryId,
       images: editing.images.split(/\n+/).map((s) => s.trim()).filter(Boolean),
@@ -485,8 +489,9 @@ function ProductsTab() {
               <div className="space-y-3">
                 <input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="اسم المنتج بالعربي" className="field text-sm" />
                 <textarea value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} placeholder="الوصف التفصيلي" rows={3} className="field text-sm" />
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <input value={editing.price} onChange={(e) => setEditing({ ...editing, price: e.target.value.replace(/[^\d]/g, "") })} placeholder="السعر د.ع" className="field text-sm" dir="ltr" inputMode="numeric" />
+                  <input value={editing.costPrice} onChange={(e) => setEditing({ ...editing, costPrice: e.target.value.replace(/[^\d]/g, "") })} placeholder="سعر التكلفة (للإدارة فقط)" className="field text-sm" dir="ltr" inputMode="numeric" />
                   <input value={editing.compareAtPrice} onChange={(e) => setEditing({ ...editing, compareAtPrice: e.target.value.replace(/[^\d]/g, "") })} placeholder="قبل الخصم" className="field text-sm" dir="ltr" inputMode="numeric" />
                   <input value={editing.stock} onChange={(e) => setEditing({ ...editing, stock: e.target.value.replace(/[^\d]/g, "") })} placeholder="المخزون" className="field text-sm" dir="ltr" inputMode="numeric" />
                 </div>

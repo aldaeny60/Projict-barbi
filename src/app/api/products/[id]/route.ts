@@ -28,7 +28,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   for (const k of ["name", "description", "slug", "barcode"] as const) {
     if (body[k] !== undefined) patch[k] = body[k];
   }
-  for (const k of ["price", "compareAtPrice", "stock", "categoryId", "soldCount"] as const) {
+  for (const k of ["price", "costPrice", "compareAtPrice", "stock", "categoryId", "soldCount"] as const) {
     if (body[k] !== undefined) patch[k] = body[k] === null ? null : Math.round(Number(body[k]));
   }
   for (const k of ["images", "colors", "sizes"] as const) {

@@ -675,6 +675,28 @@ async function run() {
     return "الإجمالي = مجموع المقاسات ✓";
   });
 
+  // 45) سعر التكلفة للإدارة فقط — لا يتسرب للكتالوج العام
+  await test("التكلفة لا تتسرب للكتالوج العام", async () => {
+    const pub = await fetch(`${BASE}/api/products?limit=5`).then(j);
+    assert(pub.products.length > 0, "empty catalog");
+    assert(pub.products.every((p) => p.costPrice === undefined), "costPrice leaked publicly");
+
+    const adm = await fetch(`${BASE}/api/products?limit=5`, { headers: { cookie: adminCookie } }).then(j);
+    assert(adm.products.every((p) => typeof p.costPrice === "number"), "costPrice missing for admin");
+    return "عام: مخفي • إدارة: ظاهر ✓";
+  });
+
+  // 46) الربح التقديري وهامشه في لوحة التحكم
+  await test("الربح التقديري وهامشه", async () => {
+    const st = await fetch(`${BASE}/api/admin/stats`, { headers: { cookie: adminCookie } }).then(j);
+    assert(typeof st.cards.profit === "number", "no profit field");
+    assert(st.cards.profit > 0, `profit ${st.cards.profit}`);
+    assert(st.cards.marginPct > 0 && st.cards.marginPct < 100, `margin ${st.cards.marginPct}`);
+    const anon = await fetch(`${BASE}/api/admin/stats`);
+    assert(anon.status === 401, `stats leaked ${anon.status}`);
+    return `ربح ${st.cards.profit.toLocaleString("en-US")} د.ع — هامش ${st.cards.marginPct}%`;
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

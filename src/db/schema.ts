@@ -33,6 +33,8 @@ export const products = pgTable(
     name: varchar("name", { length: 220 }).notNull(),
     description: text("description").notNull(),
     price: integer("price").notNull(), // IQD
+    /** سعر التكلفة — للإدارة فقط، لا يظهر في أي استجابة عامة */
+    costPrice: integer("cost_price").notNull().default(0),
     compareAtPrice: integer("compare_at_price"),
     images: jsonb("images").$type<string[]>().notNull().default([]),
     colors: jsonb("colors").$type<{ name: string; hex: string }[]>().notNull().default([]),
@@ -193,6 +195,8 @@ export const orderItems = pgTable(
     image: varchar("image", { length: 600 }),
     price: integer("price").notNull(),
     qty: integer("qty").notNull(),
+    /** لقطة تكلفة القطعة وقت البيع — لاحتساب الربح التاريخي بدقة */
+    costPrice: integer("cost_price"),
     size: varchar("size", { length: 40 }),
     color: varchar("color", { length: 60 }),
   },

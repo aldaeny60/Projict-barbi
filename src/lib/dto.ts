@@ -4,7 +4,8 @@ import type { ProductDTO } from "@/lib/types";
 export function toProductDTO(
   p: typeof products.$inferSelect,
   c?: typeof categories.$inferSelect | null,
-  sizeStock?: { size: string; stock: number }[]
+  sizeStock?: { size: string; stock: number }[],
+  includeCost = false
 ): ProductDTO {
   const discountPct =
     p.compareAtPrice && p.compareAtPrice > p.price
@@ -33,5 +34,6 @@ export function toProductDTO(
     categoryName: c?.nameAr ?? "",
     section: (c?.section as ProductDTO["section"]) ?? "boys",
     ...(sizeStock && sizeStock.length ? { sizeStock } : {}),
+    ...(includeCost ? { costPrice: p.costPrice } : {}),
   };
 }

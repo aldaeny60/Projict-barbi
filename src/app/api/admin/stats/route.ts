@@ -69,6 +69,26 @@ export async function GET(req: NextRequest) {
     prodMap.set(it.name, cur);
   }
 
+  // الربح التقديري: (سعر البيع − تكلفة وقت البيع) للقطع غير المسترجعة
+  const returnLines = ids.length
+    ? await db
+        .select({ orderItemId: orderReturnItems.orderItemId, qty: orderReturnItems.qty, orderId: orderReturns.orderId })
+        .from(orderReturnItems)
+        .innerJoin(orderReturns, eq(orderReturnItems.returnId, orderReturns.id))
+        .where(inArray(orderReturns.orderId, ids))
+    : [];
+  const returnedByItem = new Map<number, number>();
+  for (const l of returnLines) returnedByItem.set(l.orderItemId, (returnedByItem.get(l.orderItemId) ?? 0) + l.qty);
+
+  let profit = 0;
+  let itemsRevenue = 0;
+  for (const it of items) {
+    const sold = Math.max(0, it.qty - (returnedByItem.get(it.id) ?? 0));
+    profit += (it.price - (it.costPrice ?? 0)) * sold;
+    itemsRevenue += it.price * sold;
+  }
+  const marginPct = itemsRevenue > 0 ? Math.round((profit / itemsRevenue) * 100) : 0;
+
   const lowStock = await db.select().from(products).where(lte(products.stock, 8)).orderBy(products.stock).limit(10);
   const cats = await db.select().from(categories);
   const catById = new Map(cats.map((c) => [c.id, c]));
@@ -87,6 +107,8 @@ export async function GET(req: NextRequest) {
       returns: statusCounts.get("returned") ?? 0,
       webTotal,
       posTotal,
+      profit,
+      marginPct,
     },
     series,
     payments: [...payMap.entries()].map(([id, value]) => ({ id, name: methodName(id), value })),

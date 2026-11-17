@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
           name: p.name,
           image: p.images[0] ?? null,
           price: p.price,
+          costPrice: p.costPrice,
           qty,
           size: i.size ?? p.sizes[0] ?? null,
           color: i.color ?? p.colors[0]?.name ?? null,
