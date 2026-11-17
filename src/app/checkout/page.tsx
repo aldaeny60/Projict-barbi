@@ -54,6 +54,8 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState("cod");
   const [couponCode, setCouponCode] = useState("");
   const [discount, setDiscount] = useState(0);
+  const [couponMsg, setCouponMsg] = useState("");
+  const [couponBusy, setCouponBusy] = useState(false);
   const [placing, setPlacing] = useState(false);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -108,6 +110,36 @@ export default function CheckoutPage() {
   const total = Math.max(0, subtotal - discount) + (fee?.fee ?? 0);
 
   const canSubmit = name.trim().length >= 2 && isValidIraqiPhone(phone) && gov && address.trim().length >= 5 && lines.length > 0;
+
+  const applyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) {
+      setDiscount(0);
+      setCouponMsg("");
+      return;
+    }
+    setCouponBusy(true);
+    try {
+      const r = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, subtotal, phone: phone.trim() || undefined }),
+      });
+      const d = await r.json();
+      if (d.valid) {
+        setDiscount(d.discount);
+        setCouponMsg(d.message ?? "تم تطبيق الخصم");
+      } else {
+        setDiscount(0);
+        setCouponMsg(d.message ?? "هذا الكود غير صالح");
+      }
+    } catch {
+      setDiscount(0);
+      setCouponMsg("تعذر التحقق من الكود — جربي لاحقاً");
+    } finally {
+      setCouponBusy(false);
+    }
+  };
 
   const placeOrder = async () => {
     if (!canSubmit) {
@@ -368,6 +400,31 @@ export default function CheckoutPage() {
               <dt>الإجمالي</dt><dd className="text-blush-600">{formatIQD(total)}</dd>
             </div>
           </dl>
+
+          {/* كود الخصم */}
+          <div className="mt-4">
+            <div className="flex gap-1.5">
+              <input
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                placeholder="كود الخصم"
+                dir="ltr"
+                className="field flex-1 py-2.5 text-center text-sm font-black uppercase"
+              />
+              <button
+                onClick={applyCoupon}
+                disabled={couponBusy || !couponCode.trim()}
+                className="shrink-0 rounded-xl bg-ink px-4 py-2.5 text-xs font-black text-white disabled:opacity-40"
+              >
+                {couponBusy ? <Loader2 size={14} className="animate-spin" /> : "تطبيق"}
+              </button>
+            </div>
+            {couponMsg && (
+              <p className={`mt-1.5 text-[11px] font-black ${discount > 0 ? "text-minty-600" : "text-blush-600"}`}>
+                {couponMsg}
+              </p>
+            )}
+          </div>
           <button
             onClick={placeOrder}
             disabled={placing || lines.length === 0}
