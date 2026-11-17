@@ -38,3 +38,4 @@
 - تجربة المتجر: حقل كود خصم في صفحة الدفع بتحقق فوري، «شوهدت مؤخراً» في صفحة المنتج، نصوص `alt` وصفية لكل الصور، وsitemap يضم الأقسام والتصنيفات. (VERIFIED — CI 54/54)
 - سلامة المدخلات: PATCH/POST المنتج يقيّدان السعر والتكلفة والمخزون إلى ≥ 0، و`/api/coupons/validate` له حد معدل. (VERIFIED — QA 54)
 - API خارجي بمفاتيح: `api_keys` (هاش SHA-256 فقط) + `/api/v1/products` و`/api/v1/categories` للقراءة فقط، بحد 120/دقيقة لكل مفتاح وإبطال فوري، ولا سعر تكلفة في الاستجابة. (VERIFIED — QA 55)
+- تشغيل وأمان: بحث الطلبات بكود/هاتف/اسم، ترويسات CSP وCOOP، فهارس `products(price, created_at)` و`orders(status)` و`reviews(product_id)`، وسكربت `restore.sh` آمن. (VERIFIED — QA 56)

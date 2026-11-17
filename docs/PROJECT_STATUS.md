@@ -24,6 +24,9 @@
 | تجربة المتجر | VERIFIED | كود خصم في الدفع، «شوهدت مؤخراً»، نصوص بديلة وصفية، sitemap أقسام |
 | سلامة المدخلات | VERIFIED | لا سعر/مخزون سالب (QA 54) وحد معدل على تحقق الكوبون |
 | API خارجي | VERIFIED | مفاتيح قراءة فقط + إبطال فوري ولا تسريب تكلفة (QA 55) |
+| بحث الطلبات | VERIFIED | كود/هاتف/اسم في لوحة التحكم (QA 56) |
+| ترويسات الأمان | VERIFIED | CSP + COOP + HSTS في `next.config.ts` |
+| النسخ والاستعادة | VERIFIED (سكربت) | `backup.sh` + `restore.sh` بتأكيد صريح ومعاملة واحدة |
 | التشغيل والنشر | VERIFIED (ملفات) | `docker-compose.yml` + `scripts/backup.sh` + سكربتات db:generate/migrate |
 | حسابات الإدارة | VERIFIED | مالك/مدير برموز مُجزّأة، وكل إجراء منسوب لاسم صاحبه (QA 51) |
 | الزبائن (CRM) | VERIFIED | قائمة بعدد الطلبات والإنفاق وآخر طلب (QA 37) |
@@ -50,5 +53,5 @@
 
 
 ## التحقق
-`scripts/api-tests.mjs`: 55 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `b35da3f` (job 134168947395).
+`scripts/api-tests.mjs`: 56 سير عمل، و`tsc --noEmit` + `next build` — كلها في GitHub Actions وأُثبتت ناجحة على commit `6f04896` (job 134189744473).
 

@@ -90,8 +90,10 @@ docker run -p 3000:3000 barbi
 cp .env.example .env
 docker compose up -d --build     # PostgreSQL + التطبيق، DATABASE_URL يشير إلى خدمة db
 ./scripts/backup.sh              # نسخة احتياطية مضغوطة + تشذيب آخر 14
+CONFIRM_RESTORE=yes ./scripts/restore.sh backups/barbi-....sql.gz   # استعادة موثّقة
 ```
 
 - `Dockerfile` لصورة التطبيق، و`docker-compose.yml` للإنتاج، و`docker-entrypoint.sh` يفصل الوضعين.
 - عند نمو المخطط: `npm run db:generate` ثم `npm run db:migrate` بدل `push` على قاعدة فيها بيانات.
 - النسخ الاحتياطي يحتاج `pg_dump` على الجهاز وعلى جدولة يومية (cron) في الإنتاج.
+- ترويسات الأمان في `next.config.ts` تشمل CSP وCOOP وHSTS (بلا nonce حتى لا تتعطل ترطيب Next).

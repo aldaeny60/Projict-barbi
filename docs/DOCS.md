@@ -126,7 +126,7 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 3. **سكالبج**: نسخة واحدة تكفي في البداية؛ عند التعدد اضبط `UPSTASH_REDIS_REST_URL/TOKEN` ليكون حد المعدل مشتركاً، ثم Kubernetes.
 4. **iOS/Android**: كود Flutter موحد يستهلك نفس الـ API ويفتح عبر App Store Connect وPlay Console (أسماء: "باربي BARBI"). حتى الإطلاق، الـ PWA يعطي نفس التجربة: "إضافة إلى الشاشة الرئيسية".
 5. **إشعارات Push**: لم تُنفّذ بعد — تحتاج مفاتيح Firebase وكود إرسال.
-6. **النسخ الاحتياطي**: `./scripts/backup.sh` ينسخ ويضغط ويتحقق ويحفظ آخر 14 نسخة — جدوله يومياً (cron).
+6. **النسخ الاحتياطي**: `./scripts/backup.sh` ينسخ ويضغط ويتحقق ويحفظ آخر 14 نسخة — جدوله يومياً (cron). والاستعادة: `CONFIRM_RESTORE=yes ./scripts/restore.sh backups/<file>.sql.gz` (تتحقق من الملف، وتعمل داخل معاملة واحدة، وترفض التنفيذ بلا تأكيد صريح).
 7. **المراقبة**: Sentry/uptime + تنبيه على `audit_logs` (محاولات دخول فاشلة متكررة).
 8. **المخطط**: `npm run db:generate` ثم `npm run db:migrate` على قاعدة فيها بيانات (بدل `push`).
 
