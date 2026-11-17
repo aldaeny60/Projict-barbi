@@ -624,19 +624,24 @@ function ProductsTab() {
 function OrdersTab() {
   const [orders, setOrders] = useState<OrderDTO[] | null>(null);
   const [filter, setFilter] = useState("all");
+  const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
   const [statusError, setStatusError] = useState<{ id: number; text: string } | null>(null);
   const [returnFor, setReturnFor] = useState<number | null>(null);
   const [returnQty, setReturnQty] = useState<Record<number, string>>({});
   const [returnBusy, setReturnBusy] = useState(false);
 
-  const load = useCallback((status: string) => {
+  const load = useCallback((status: string, query = "") => {
     setOrders(null);
-    fetch("/api/admin/stats", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })
+    fetch("/api/admin/stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, q: query || undefined }),
+    })
       .then((r) => r.json()).then((d) => setOrders(d.orders ?? [])).catch(() => setOrders([]));
   }, []);
 
-  useEffect(() => { load(filter); }, [filter, load]);
+  useEffect(() => { load(filter, q.trim()); }, [filter, q, load]);
 
   const setStatus = async (id: number, status: string) => {
     setStatusError(null);
@@ -684,16 +689,25 @@ function OrdersTab() {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          {[{ k: "all", l: "الكل" }, ...ORDER_STATUSES.map((s) => ({ k: s, l: orderStatusLabel(s) }))].map((s) => (
-            <button key={s.k} onClick={() => setFilter(s.k)}
-              className={`shrink-0 rounded-full px-3.5 py-2 text-[11px] font-black ${filter === s.k ? "bg-ink text-white" : "bg-white text-ink-soft shadow-soft"}`}>{s.l}</button>
-          ))}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-52">
+          <Search size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="بحث بكود الطلب أو الهاتف أو الاسم..."
+            className="field pr-10 py-2.5 text-sm"
+          />
         </div>
         <a href="/api/admin/export?type=orders" className="flex shrink-0 items-center gap-1.5 rounded-full bg-minty-100 px-3.5 py-2 text-[11px] font-black text-minty-700">
           <Download size={13} /> تصدير CSV
         </a>
+      </div>
+      <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+        {[{ k: "all", l: "الكل" }, ...ORDER_STATUSES.map((s) => ({ k: s, l: orderStatusLabel(s) }))].map((s) => (
+          <button key={s.k} onClick={() => setFilter(s.k)}
+            className={`shrink-0 rounded-full px-3.5 py-2 text-[11px] font-black ${filter === s.k ? "bg-ink text-white" : "bg-white text-ink-soft shadow-soft"}`}>{s.l}</button>
+        ))}
       </div>
       <div className="space-y-2.5">
         {orders === null && <div className="shimmer h-40 rounded-3xl" />}

@@ -136,9 +136,19 @@ export async function GET(req: NextRequest) {
 /** lightweight — order rows for admin orders tab (with timeline + returned quantities) */
 export async function POST(req: NextRequest) {
   if (!isAdminAuthed(req)) return adminUnauthorized();
-  const body = (await req.json().catch(() => ({}))) as { status?: string };
+  const body = (await req.json().catch(() => ({}))) as { status?: string; q?: string };
   const all = await db.select().from(orders).orderBy(desc(orders.createdAt)).limit(200);
-  const filtered = body.status && body.status !== "all" ? all.filter((o) => o.status === body.status) : all;
+  const q = body.q?.trim().toLowerCase();
+  const filtered = all.filter((o) => {
+    if (body.status && body.status !== "all" && o.status !== body.status) return false;
+    if (!q) return true;
+    return (
+      o.code.toLowerCase().includes(q) ||
+      o.phone.includes(q) ||
+      o.customerName.toLowerCase().includes(q) ||
+      (o.staffName ?? "").toLowerCase().includes(q)
+    );
+  });
   const ids = filtered.map((o) => o.id);
 
   const items = ids.length ? await db.select().from(orderItems).where(inArray(orderItems.orderId, ids)) : [];

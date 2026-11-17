@@ -54,6 +54,8 @@ export const products = pgTable(
   (t) => [
     index("products_category_idx").on(t.categoryId),
     index("products_name_idx").on(t.name),
+    index("products_price_idx").on(t.price),
+    index("products_created_idx").on(t.createdAt),
   ]
 );
 
@@ -73,7 +75,7 @@ export const reviews = pgTable(
     comment: text("comment").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("reviews_product_phone_idx").on(t.productId, t.phone)]
+  (t) => [index("reviews_product_idx").on(t.productId), uniqueIndex("reviews_product_phone_idx").on(t.productId, t.phone)]
 );
 
 export type ReviewRow = typeof reviews.$inferSelect;
@@ -185,7 +187,11 @@ export const orders = pgTable(
     requestKey: varchar("request_key", { length: 64 }).unique(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("orders_created_idx").on(t.createdAt), index("orders_phone_idx").on(t.phone)]
+  (t) => [
+    index("orders_created_idx").on(t.createdAt),
+    index("orders_phone_idx").on(t.phone),
+    index("orders_status_idx").on(t.status),
+  ]
 );
 
 export type OrderRow = typeof orders.$inferSelect;

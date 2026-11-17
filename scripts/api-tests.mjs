@@ -980,6 +980,32 @@ async function run() {
     return "قراءة فقط + إبطال فوري ✓";
   });
 
+  // 56) بحث الطلبات في الإدارة (كود/هاتف/اسم)
+  await test("بحث الطلبات في الإدارة", async () => {
+    const byCode = await fetch(`${BASE}/api/admin/stats`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ status: "all", q: orderCode }),
+    }).then(j);
+    assert(byCode.orders?.length === 1 && byCode.orders[0].code === orderCode, `code search: ${byCode.orders?.length}`);
+
+    const byPhone = await fetch(`${BASE}/api/admin/stats`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ status: "all", q: QA_PHONE }),
+    }).then(j);
+    assert(byPhone.orders?.length >= 1, "phone search found nothing");
+    assert(byPhone.orders.every((o) => o.phone === QA_PHONE), "phone search leaked other customers");
+
+    const none = await fetch(`${BASE}/api/admin/stats`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ status: "all", q: "ZZZ-NO-SUCH-ORDER" }),
+    }).then(j);
+    assert(none.orders?.length === 0, "bogus query returned rows");
+    return `${byPhone.orders.length} طلب برقم الهاتف ✓`;
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");
