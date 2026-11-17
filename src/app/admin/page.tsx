@@ -69,6 +69,8 @@ export default function AdminPage() {
   const [code, setCode] = useState("");
   const [adminName, setAdminName] = useState("");
   const [adminRole, setAdminRole] = useState<"owner" | "manager">("owner");
+  const [needs2fa, setNeeds2fa] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
   const [tab, setTab] = useState<Tab>("overview");
   const [stats, setStats] = useState<Stats | null>(null);
 
@@ -104,15 +106,22 @@ export default function AdminPage() {
     const r = await fetch("/api/admin/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin: code, name: adminName.trim() || undefined }),
+      body: JSON.stringify({
+        pin: code,
+        name: adminName.trim() || undefined,
+        code: needs2fa ? twoFactorCode : undefined,
+      }),
     });
     if (r.ok) {
       const d = await r.json().catch(() => null);
       if (d?.role === "manager") setAdminRole("manager");
       else setAdminRole("owner");
+      setNeeds2fa(false);
+      setTwoFactorCode("");
       setAuthed(true);
     } else {
       const d = await r.json().catch(() => null);
+      if (d?.needs2fa) setNeeds2fa(true);
       setPinError(d?.error ?? "تعذر الدخول");
     }
   };
@@ -155,6 +164,17 @@ export default function AdminPage() {
             className="field mt-2.5 text-center text-2xl font-black tracking-[0.5em]"
           />
           {pinError && <p className="mt-2 text-center text-[11px] font-black text-blush-600">{pinError}</p>}
+          {needs2fa && (
+            <input
+              value={twoFactorCode}
+              onChange={(e) => setTwoFactorCode(e.target.value.replace(/[^\d]/g, ""))}
+              placeholder="رمز تطبيق المصادقة (6 أرقام)"
+              dir="ltr"
+              inputMode="numeric"
+              maxLength={6}
+              className="field mt-2.5 text-center text-lg font-black tracking-[0.4em]"
+            />
+          )}
           <button
             onClick={doLogin}
             disabled={!code}
@@ -1422,7 +1442,7 @@ function CustomersTab() {
 
 /* ═══ حسابات الإدارة ═══ */
 
-type AdminUserRow = { id: number; name: string; role: string; active: boolean; createdAt: string };
+type AdminUserRow = { id: number; name: string; role: string; active: boolean; twoFactor?: boolean; createdAt: string };
 
 function AccountsTab({ role }: { role: "owner" | "manager" }) {
   const [users, setUsers] = useState<AdminUserRow[] | null>(null);
@@ -1508,6 +1528,7 @@ function AccountsTab({ role }: { role: "owner" | "manager" }) {
                   <p className="text-sm font-black">{u.name}</p>
                   <p className="text-[11px] font-bold text-ink-soft">
                     {u.role === "owner" ? "مالك" : "مدير"} • {u.active ? "مفعّل" : "موقوف"}
+                    {u.twoFactor ? " • تحقق بخطوتين" : ""}
                   </p>
                 </div>
               </div>
@@ -1526,6 +1547,15 @@ function AccountsTab({ role }: { role: "owner" | "manager" }) {
                 >
                   رمز جديد
                 </button>
+                {u.twoFactor && (
+                  <button
+                    onClick={() => patch(u.id, { resetTwoFactor: true })}
+                    className="rounded-full bg-butter-100 px-3 py-1.5 text-[10px] font-black text-butter-700"
+                    title="لمن فقد جهازه — يُعطّل التحقق بخطوتين"
+                  >
+                    تصفير 2FA
+                  </button>
+                )}
                 <button
                   onClick={() => patch(u.id, { active: !u.active })}
                   className={`rounded-full px-3.5 py-1.5 text-[11px] font-black ${u.active ? "bg-minty-100 text-minty-700" : "bg-ink/5 text-ink-faint"}`}
@@ -1591,7 +1621,160 @@ function AccountsTab({ role }: { role: "owner" | "manager" }) {
             كل إجراء يُنسب لاسم صاحب الحساب في سجل التدقيق. «المالك» يدير الحسابات، و«المدير» يدير المتجر بلا صلاحية على الحسابات.
           </p>
         </div>
+
+        <TwoFactorBox />
       </div>
+    </div>
+  );
+}
+
+/** التحقق بخطوتين للحساب الحالي — يفعّله صاحب الحساب بنفسه */
+function TwoFactorBox() {
+  const [state, setState] = useState<{ name: string; twoFactor: boolean; available: boolean } | null>(null);
+  const [setup, setSetup] = useState<{ secret: string; otpauth: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    fetch("/api/admin/2fa")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setState(d))
+      .catch(() => {});
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const start = async () => {
+    setMsg("");
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/2fa", { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? "تعذر البدء");
+      setSetup({ secret: d.secret, otpauth: d.otpauth });
+      setMsg("أضف السرّ في Google Authenticator ثم أدخل الرمز لتأكيد التفعيل");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "تعذر البدء");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirm = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/admin/2fa", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? "رمز غير صحيح");
+      setSetup(null);
+      setCode("");
+      setMsg("تم تفعيل التحقق بخطوتين ✓");
+      load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "رمز غير صحيح");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/admin/2fa", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error ?? "تعذر التعطيل");
+      setCode("");
+      setMsg("تم تعطيل التحقق بخطوتين");
+      load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "تعذر التعطيل");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!state) return null;
+
+  return (
+    <div className="card-bubble mt-4 p-5">
+      <h3 className="flex items-center gap-2 text-sm font-black">
+        <Lock size={14} /> التحقق بخطوتين {state.twoFactor ? <span className="rounded-full bg-minty-100 px-2 py-0.5 text-[10px] text-minty-700">مفعّل</span> : null}
+      </h3>
+
+      {!state.available ? (
+        <p className="mt-2 text-[11px] font-bold leading-6 text-ink-soft">
+          متاح لحسابات الإدارة الفردية. ادخل باسم حسابك (لا برمز `ADMIN_PIN`) لتتمكن من تفعيله.
+        </p>
+      ) : state.twoFactor ? (
+        <>
+          <p className="mt-2 text-[11px] font-bold leading-6 text-ink-soft">
+            حساب <span className="font-black text-ink">{state.name}</span> محمي برمز من تطبيق المصادقة مع كل دخول.
+          </p>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="رمز من 6 أرقام لتعطيله"
+            dir="ltr"
+            inputMode="numeric"
+            maxLength={6}
+            className="field mt-2 text-center text-sm font-black tracking-widest"
+          />
+          <button
+            onClick={disable}
+            disabled={busy || code.length !== 6}
+            className="mt-2 w-full rounded-xl bg-blush-50 py-2.5 text-[11px] font-black text-blush-600 disabled:opacity-40"
+          >
+            تعطيل التحقق بخطوتين
+          </button>
+        </>
+      ) : setup ? (
+        <>
+          <p className="mt-2 text-[11px] font-bold leading-6 text-ink-soft">{msg}</p>
+          <code className="mt-1 block break-all rounded-xl bg-paper p-2 text-[11px] font-black" dir="ltr">{setup.secret}</code>
+          <code className="mt-1 block break-all rounded-xl bg-paper p-2 text-[10px]" dir="ltr">{setup.otpauth}</code>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="رمز التطبيق (6 أرقام)"
+            dir="ltr"
+            inputMode="numeric"
+            maxLength={6}
+            className="field mt-2 text-center text-sm font-black tracking-widest"
+          />
+          <button
+            onClick={confirm}
+            disabled={busy || code.length !== 6}
+            className="mt-2 w-full rounded-xl bg-ink py-2.5 text-[11px] font-black text-white disabled:opacity-40"
+          >
+            تأكيد التفعيل
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-[11px] font-bold leading-6 text-ink-soft">
+            أضف طبقة حماية ثانية لحساب <span className="font-black text-ink">{state.name}</span> باستخدام Google Authenticator أو أي تطبيق TOTP.
+          </p>
+          <button
+            onClick={start}
+            disabled={busy}
+            className="mt-2 w-full rounded-xl bg-ink py-2.5 text-[11px] font-black text-white disabled:opacity-40"
+          >
+            {busy ? "جاري التحضير…" : "بدء التفعيل"}
+          </button>
+        </>
+      )}
+
+      {msg && !setup && <p className="mt-2 text-[11px] font-black text-ink-soft">{msg}</p>}
     </div>
   );
 }

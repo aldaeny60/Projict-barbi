@@ -420,6 +420,9 @@ export const adminUsers = pgTable("admin_users", {
   pinHash: varchar("pin_hash", { length: 200 }).notNull(),
   role: varchar("role", { length: 16 }).notNull().default("manager"), // owner | manager
   active: boolean("active").notNull().default(true),
+  /** سرّ TOTP (base32) — يُخزَّن فقط بعد بدء التفعيل، ويُمسح عند الإيقاف */
+  totpSecret: varchar("totp_secret", { length: 64 }),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

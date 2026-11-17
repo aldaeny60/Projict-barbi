@@ -6,6 +6,7 @@ import { ADMIN_COOKIE, adminPin, setAdminCookie, type AdminRole } from "@/lib/ad
 import { adminActor, logAudit } from "@/lib/audit";
 import { checkRateLimitShared, clientKey, rateLimited } from "@/lib/rate-limit";
 import { verifyPin } from "@/lib/staff-auth";
+import { verifyTotp } from "@/lib/totp";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,10 @@ export async function POST(req: NextRequest) {
     return rateLimited(rl.retryAfterSec);
   }
 
-  const body = (await req.json().catch(() => ({}))) as { pin?: string; name?: string };
+  const body = (await req.json().catch(() => ({}))) as { pin?: string; name?: string; code?: string };
   const pin = String(body.pin ?? "").replace(/\D/g, "");
   const name = String(body.name ?? "").trim();
+  const code = String(body.code ?? "").replace(/\D/g, "");
 
   if (name) {
     const [user] = await db
@@ -36,9 +38,29 @@ export async function POST(req: NextRequest) {
       await logAudit(adminActor(req), "admin.login.failed", null, { reason: "wrong-user-pin", name });
       return NextResponse.json({ error: "الاسم أو الرمز غير صحيح" }, { status: 401 });
     }
+
+    // التحقق بخطوتين عند تفعيله لهذا الحساب
+    if (user.totpEnabled) {
+      if (!code) {
+        return NextResponse.json(
+          { error: "أدخل رمز التحقق من تطبيق المصادقة", needs2fa: true },
+          { status: 401 }
+        );
+      }
+      if (!user.totpSecret || !verifyTotp(user.totpSecret, code)) {
+        await logAudit({ actor: user.name, role: "admin", ip: null }, "admin.login.failed", `admin:${user.id}`, { reason: "wrong-2fa" });
+        return NextResponse.json({ error: "رمز التحقق غير صحيح", needs2fa: true }, { status: 401 });
+      }
+    }
+
     const role: AdminRole = user.role === "owner" ? "owner" : "manager";
-    await logAudit({ actor: user.name, role: "admin", ip: null }, "admin.login", `admin:${user.id}`, { via: "account" });
-    const res = NextResponse.json({ ok: true, name: user.name, role });
+    await logAudit(
+      { actor: user.name, role: "admin", ip: null },
+      "admin.login",
+      `admin:${user.id}`,
+      { via: "account", twoFactor: user.totpEnabled }
+    );
+    const res = NextResponse.json({ ok: true, name: user.name, role, twoFactor: user.totpEnabled });
     setAdminCookie(res, { name: user.name, role });
     return res;
   }

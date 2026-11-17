@@ -1057,6 +1057,90 @@ async function run() {
     return "503 بلا اعتماد + توقيع مزوّر مرفوض ✓";
   });
 
+  // 58) التحقق بخطوتين: بدء التفعيل، رمز خاطئ مرفوض، رمز صحيح يفعّل، والدخول يطلبه
+  await test("التحقق بخطوتين لحساب الإدارة", async () => {
+    const name = `QA-2FA-${Date.now().toString().slice(-5)}`;
+    const pin = "4820";
+    const created = await fetch(`${BASE}/api/admin/users`, {
+      method: "POST",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ name, role: "manager", pin }),
+    }).then(j);
+    assert(created.user?.id, JSON.stringify(created));
+
+    const login = await fetch(`${BASE}/api/admin/login`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ name, pin }),
+    });
+    assert(login.ok, `login ${login.status}`);
+    const userCookie = (login.headers.get("set-cookie") || "").split(";")[0];
+
+    const start = await fetch(`${BASE}/api/admin/2fa`, { method: "POST", headers: { cookie: userCookie } }).then(j);
+    assert(start.secret && start.otpauth?.startsWith("otpauth://"), JSON.stringify(start).slice(0, 200));
+
+    // حساب TOTP داخل الاختبار بلا اعتماد على TS (نفس خوارزمية lib/totp.ts)
+    const { createHmac } = await import("node:crypto");
+    const b32 = (s) => {
+      const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+      let bits = 0, value = 0; const out = [];
+      for (const ch of s.replace(/=+$/, "").toUpperCase()) {
+        const idx = A.indexOf(ch); if (idx < 0) continue;
+        value = (value << 5) | idx; bits += 5;
+        if (bits >= 8) { out.push((value >>> (bits - 8)) & 255); bits -= 8; }
+      }
+      return Buffer.from(out);
+    };
+    const codeAt = (offsetSteps = 0) => {
+      const counter = Math.floor(Date.now() / 1000 / 30) + offsetSteps;
+      const buf = Buffer.alloc(8); buf.writeBigUInt64BE(BigInt(counter));
+      const d = createHmac("sha1", b32(start.secret)).update(buf).digest();
+      const o = d[d.length - 1] & 0x0f;
+      const n = ((d[o] & 0x7f) << 24) | ((d[o + 1] & 0xff) << 16) | ((d[o + 2] & 0xff) << 8) | (d[o + 3] & 0xff);
+      return String(n % 1_000_000).padStart(6, "0");
+    };
+
+    const wrong = await fetch(`${BASE}/api/admin/2fa`, {
+      method: "PUT",
+      headers: { ...jsonHeaders, cookie: userCookie },
+      body: JSON.stringify({ code: "000000" }),
+    });
+    assert(wrong.status === 400, `wrong code got ${wrong.status}`);
+
+    const ok = await fetch(`${BASE}/api/admin/2fa`, {
+      method: "PUT",
+      headers: { ...jsonHeaders, cookie: userCookie },
+      body: JSON.stringify({ code: codeAt() }),
+    }).then(j);
+    assert(ok.ok && ok.twoFactor === true, JSON.stringify(ok));
+
+    // الدخول الآن يتطلب الرمز
+    const noCode = await fetch(`${BASE}/api/admin/login`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ name, pin }),
+    }).then(j);
+    assert(noCode.needs2fa === true, JSON.stringify(noCode));
+
+    const withCode = await fetch(`${BASE}/api/admin/login`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ name, pin, code: codeAt() }),
+    });
+    assert(withCode.ok, `login with 2fa got ${withCode.status}`);
+
+    // المالك يصفّر التحقق لمن فقد جهازه
+    const reset = await fetch(`${BASE}/api/admin/users`, {
+      method: "PATCH",
+      headers: { ...jsonHeaders, cookie: adminCookie },
+      body: JSON.stringify({ id: created.user.id, resetTwoFactor: true }),
+    }).then(j);
+    assert(reset.user?.twoFactor === false, JSON.stringify(reset));
+
+    await fetch(`${BASE}/api/admin/users?id=${created.user.id}`, { method: "DELETE", headers: { cookie: adminCookie } });
+    return "بدء + رمز خاطئ 400 + تفعيل + دخول بالرمز + تصفير ✓";
+  });
+
   // ── النتائج ──
   console.log("\n| # | سير العمل | النتيجة | الدليل |");
   console.log("|---|---|---|---|");

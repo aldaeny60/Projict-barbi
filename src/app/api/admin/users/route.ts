@@ -6,6 +6,7 @@ import { adminForbidden, adminSession, adminUnauthorized, isAdminAuthed, isAdmin
 import { adminActor, logAudit } from "@/lib/audit";
 import { isSameOrigin } from "@/lib/session";
 import { hashPin, isValidPin } from "@/lib/staff-auth";
+import { verifyTotp } from "@/lib/totp";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
       name: u.name,
       role: u.role,
       active: u.active,
+      twoFactor: u.totpEnabled,
       createdAt: u.createdAt.toISOString(),
     })),
   });
@@ -84,6 +86,10 @@ export async function PATCH(req: NextRequest) {
     pin?: string;
     role?: string;
     active?: boolean;
+    /** إدارة التحقق بخطوتين */
+    resetTwoFactor?: boolean;
+    enableTwoFactor?: boolean;
+    code?: string;
   };
   const id = Number(body.id);
   if (!id) return Response.json({ error: "معرّف مطلوب" }, { status: 400 });
@@ -107,6 +113,21 @@ export async function PATCH(req: NextRequest) {
     if (!isValidPin(pin)) return Response.json({ error: "الرمز يجب أن يكون 4 إلى 8 أرقام" }, { status: 400 });
     patch.pinHash = hashPin(pin);
   }
+  // المالك يصفّر التحقق بخطوتين لحساب فقد جهازه
+  if (body.resetTwoFactor) {
+    patch.totpEnabled = false;
+    patch.totpSecret = null;
+  }
+  // أو يفعّله مباشرةً برمز صالح من تطبيق الحساب نفسه
+  if (body.enableTwoFactor) {
+    if (!target.totpSecret) {
+      return Response.json({ error: "لا يوجد سرّ تحقق لهذا الحساب — اطلب منه بدء التفعيل أولاً" }, { status: 400 });
+    }
+    if (!verifyTotp(target.totpSecret, String(body.code ?? ""))) {
+      return Response.json({ error: "رمز التحقق غير صحيح" }, { status: 400 });
+    }
+    patch.totpEnabled = true;
+  }
   if (!Object.keys(patch).length) return Response.json({ error: "لا يوجد تغيير" }, { status: 400 });
 
   // حماية آخر مالك مفعّل
@@ -120,10 +141,14 @@ export async function PATCH(req: NextRequest) {
 
   const [row] = await db.update(adminUsers).set(patch).where(eq(adminUsers.id, id)).returning();
   await logAudit(adminActor(req), "admin.user.update", `admin:${id}`, {
-    fields: Object.keys(patch).filter((k) => k !== "pinHash"),
+    fields: Object.keys(patch).filter((k) => k !== "pinHash" && k !== "totpSecret"),
     pinReset: Boolean(patch.pinHash),
+    twoFactorReset: Boolean(body.resetTwoFactor),
+    twoFactorEnabled: Boolean(body.enableTwoFactor),
   });
-  return Response.json({ user: { id: row.id, name: row.name, role: row.role, active: row.active } });
+  return Response.json({
+    user: { id: row.id, name: row.name, role: row.role, active: row.active, twoFactor: row.totpEnabled },
+  });
 }
 
 export async function DELETE(req: NextRequest) {
