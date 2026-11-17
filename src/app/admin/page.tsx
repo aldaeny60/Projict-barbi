@@ -480,7 +480,7 @@ function ProductsTab() {
                   <td className="p-3">
                     <div className="flex items-center gap-2.5">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={p.images[0]} alt="" className="size-10 rounded-xl object-cover" />
+                      <img src={p.images[0]} alt={p.name} className="size-10 rounded-xl object-cover" />
                       <span className="max-w-44"><span className="line-clamp-2">{p.name}</span>{p.isNew && <span className="mr-1 rounded bg-minty-100 px-1 py-0.5 text-[8px] font-black text-minty-700">جديد</span>}</span>
                     </div>
                   </td>
@@ -548,7 +548,7 @@ function ProductsTab() {
                   <div className="flex flex-wrap gap-1.5">
                     {editing.images.split(/\n+/).map((s) => s.trim()).filter(Boolean).slice(0, 8).map((src) => (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img key={src} src={src} alt="" className="size-14 rounded-xl object-cover ring-2 ring-paper" />
+                      <img key={src} src={src} alt={`معاينة صورة ${editing.name}`} className="size-14 rounded-xl object-cover ring-2 ring-paper" />
                     ))}
                   </div>
                 )}
@@ -717,7 +717,7 @@ function OrdersTab() {
                     <div key={it.id} className="flex items-center gap-2.5 text-xs font-bold">
                       {it.image && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={it.image} alt="" className="size-9 rounded-lg object-cover" />
+                        <img src={it.image} alt={it.name} className="size-9 rounded-lg object-cover" />
                       )}
                       <span className="flex-1">{it.name} <span className="text-ink-faint">({it.size}/{it.color})</span></span>
                       <span>×{it.qty}</span>
@@ -955,7 +955,7 @@ function InventoryTab({ stats, onRefresh }: { stats: Stats | null; onRefresh: ()
           <div key={p.id} className="card-bubble flex flex-wrap items-center justify-between gap-3 p-4">
             <div className="flex items-center gap-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.images[0]} alt="" className="size-12 rounded-xl object-cover" />
+              <img src={p.images[0]} alt={p.name} className="size-12 rounded-xl object-cover" />
               <div>
                 <p className="max-w-64 line-clamp-1 text-xs font-black">{p.name}</p>
                 <p className="text-[10px] font-bold text-blush-600">المتبقي: {p.stock} قطعة فقط</p>

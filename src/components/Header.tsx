@@ -162,7 +162,7 @@ export function Header() {
                       >
                         {s.image && (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={s.image} alt="" className="size-11 rounded-xl object-cover" />
+                          <img src={s.image} alt={s.name} className="size-11 rounded-xl object-cover" />
                         )}
                         <span className="flex-1 text-sm font-bold leading-snug">{s.name}</span>
                         <span className="text-xs font-black text-blush-600">{formatIQD(s.price)}</span>
@@ -284,7 +284,7 @@ export function Header() {
                   >
                     {s.image && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={s.image} alt="" className="size-10 rounded-xl object-cover" />
+                      <img src={s.image} alt={s.name} className="size-10 rounded-xl object-cover" />
                     )}
                     <span className="flex-1 text-[13px] font-bold leading-snug">{s.name}</span>
                     <span className="text-xs font-black text-blush-600">{formatIQD(s.price)}</span>

@@ -21,6 +21,7 @@ import type { ProductDTO, ReviewDTO } from "@/lib/types";
 import { formatIQD, fmtDate, formatNum } from "@/lib/format";
 import { SIZE_CHART, SECTIONS } from "@/lib/data";
 import { ProductCard, Stars, SectionTitle } from "./ProductCard";
+import { RecentlyViewed } from "./RecentlyViewed";
 import { useCart, useCustomer, useFavorites, useToast } from "./providers";
 
 export function ProductView({
@@ -182,7 +183,7 @@ export function ProductView({
                 aria-label={`صورة ${i + 1}`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="" className="absolute inset-0 size-full object-cover" />
+                <img src={src} alt={`${p.name} — صورة ${i + 1}`} className="absolute inset-0 size-full object-cover" />
               </button>
             ))}
           </div>
@@ -449,6 +450,8 @@ export function ProductView({
           ))}
         </div>
       </div>
+
+      <RecentlyViewed current={{ id: p.id, name: p.name, price: p.price, image: p.images[0] ?? "" }} />
     </div>
   );
 }

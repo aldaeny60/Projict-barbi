@@ -351,7 +351,7 @@ export default function CheckoutPage() {
             {lines.map((l) => (
               <div key={`${l.productId}-${l.size}-${l.color}`} className="flex items-center gap-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={l.image} alt="" className="size-11 rounded-xl object-cover" />
+                <img src={l.image} alt={l.name} className="size-11 rounded-xl object-cover" />
                 <div className="flex-1">
                   <p className="line-clamp-1 text-[11px] font-black">{l.name}</p>
                   <p className="text-[10px] font-bold text-ink-faint">{l.size} • {l.color} • ×{l.qty}</p>

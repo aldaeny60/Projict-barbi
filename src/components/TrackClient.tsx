@@ -296,7 +296,7 @@ function OrderTrackCard({
               <div key={it.id} className="flex items-center gap-3">
                 {it.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.image} alt="" className="size-12 rounded-xl object-cover ring-2 ring-paper" />
+                  <img src={it.image} alt={it.name} className="size-12 rounded-xl object-cover ring-2 ring-paper" />
                 ) : (
                   <span className="grid size-12 place-items-center rounded-xl bg-ink/5 text-ink-faint">
                     <Package size={16} />

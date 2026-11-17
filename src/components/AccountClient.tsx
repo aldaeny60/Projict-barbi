@@ -315,7 +315,7 @@ function OrdersTab({ orders, reload }: { orders: OrderDTO[] | null; reload: () =
                 {o.items.slice(0, 4).map((it) => (
                   it.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img key={it.id} src={it.image} alt="" className="size-11 rounded-xl object-cover ring-2 ring-paper" />
+                    <img key={it.id} src={it.image} alt={it.name} className="size-11 rounded-xl object-cover ring-2 ring-paper" />
                   ) : null
                 ))}
                 {o.items.length > 4 && <span className="text-[10px] font-black text-ink-soft">+{o.items.length - 4}</span>}

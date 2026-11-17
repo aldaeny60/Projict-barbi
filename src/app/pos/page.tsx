@@ -393,7 +393,7 @@ export default function PosPage() {
                 >
                   <div className="relative aspect-[4/3.4] overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.images[0]} alt="" loading="lazy" className="absolute inset-0 size-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                    <img src={p.images[0]} alt={p.name} loading="lazy" className="absolute inset-0 size-full object-cover transition-transform duration-500 group-hover:scale-105" />
                     {p.discountPct && <span className="absolute right-2 top-2 rounded-full bg-butter-400 px-2 py-0.5 text-[10px] font-black text-ink">-{p.discountPct}%</span>}
                     {p.stock <= 8 && p.stock > 0 && <span className="absolute left-2 top-2 rounded-full bg-blush-500 px-2 py-0.5 text-[10px] font-black text-white">باقي {p.stock}</span>}
                   </div>
@@ -443,7 +443,7 @@ export default function PosPage() {
                 return (
                   <motion.div key={k} layout initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex items-center gap-2.5 rounded-2xl bg-white p-2 shadow-soft ring-1 ring-black/5">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={l.image} alt="" className="size-12 rounded-xl object-cover" />
+                    <img src={l.image} alt={l.name} className="size-12 rounded-xl object-cover" />
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-1 text-[11px] font-black">{l.name}</p>
                       <p className="text-[10px] font-bold text-ink-faint">{l.size} • {l.color}</p>
@@ -526,7 +526,7 @@ export default function PosPage() {
         {variantFor && (
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={variantFor.images[0]} alt="" className="h-44 w-full rounded-2xl object-cover" />
+            <img src={variantFor.images[0]} alt={variantFor.name} className="h-44 w-full rounded-2xl object-cover" />
             <h3 className="mt-3 text-base font-black">{variantFor.name}</h3>
             <p className="text-sm font-black text-blush-600">{formatIQD(variantFor.price)}</p>
             <p className="mb-1.5 mt-4 text-xs font-black text-ink-soft">المقاس</p>
