@@ -79,6 +79,15 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 ### الإدارة
 - `GET /api/admin/stats` — بطاقات + سلسلة 14 يوم + بوابات الدفع + المحافظات + أفضل المنتجات + مخزون منخفض.
 - `POST /api/admin/stats {status}` — قائمة الطلبات المفلترة. `PATCH` — `{productId, add}` لإعادة التخزين.
+- `GET/POST/PATCH/DELETE /api/admin/api-keys` — مفاتيح API للقراءة (المالك فقط). المفتاح يُعرض مرة واحدة، ويُخزَّن هاشه فقط.
+
+### API خارجي (قراءة فقط)
+| Method | Path | الوصف |
+|---|---|---|
+| GET | `/api/v1/products` | كتالوج عام بمفتاح API: نفس فلاتر المتجر (section/category/q/sort/minPrice/maxPrice/size/color/limit/offset). لا يعيد `costPrice` ولا بيانات زبائن |
+| GET | `/api/v1/categories` | التصنيفات العامة |
+
+المصادقة: `Authorization: Bearer <key>` أو `x-api-key: <key>`. الحد 120 طلباً/دقيقة لكل مفتاح. المفتاح يُنشأ من `/admin` ← «مفاتيح API»، والإبطال فوري.
 - `POST /api/admin/login {name?, pin}` — باسم حساب إداري تُبنى الجلسة باسمه ودوره؛ وبلا اسم يُقبل `ADMIN_PIN` كمالك. `DELETE` خروج.
 - `GET/POST/PATCH/DELETE /api/admin/users` — حسابات الإدارة (المالك فقط): اسم + رمز PIN + دور (owner/manager). آخر مالك مفعّل محمي من الحذف/الإيقاف، والمدير يحصل 403.
 - `GET/POST/PATCH/DELETE /api/admin/staff` — حسابات الموظفين: الاسم والدور والفرع ورمز PIN (4–8 أرقام، يُخزَّن scrypt). لا يُعاد أي hash.
