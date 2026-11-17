@@ -789,17 +789,6 @@ async function run() {
     return `${body.split("\r\n").length - 1} صف طلبات ✓`;
   });
 
-  // 50) سجل الحالات يظهر في التتبع (موثّق ومخفي)
-  await test("سجل الحالات في صفحة التتبع", async () => {
-    const r = await fetch(`${BASE}/api/track`, { headers: { cookie: custCookie } }).then(j);
-    const o = (r.orders ?? [])[0];
-    assert(o && Array.isArray(o.events) && o.events.length > 0, "no events for verified tracking");
-    assert(orderCode, "no order code captured");
-    const pub = await fetch(`${BASE}/api/track?phone=${QA_PHONE}&code=${orderCode}`).then(j);
-    assert(Array.isArray(pub.orders?.[0]?.history), "public history missing");
-    return `${o.events.length} حدث ✓`;
-  });
-
   // 50) سجل الحالات متاح للتتبع: كامل للجلسة، مخفّف برقم الطلب
   await test("سجل حالات الطلب في التتبع", async () => {
     const mine = await fetch(`${BASE}/api/track`, { headers: { cookie: custCookie } }).then(j);

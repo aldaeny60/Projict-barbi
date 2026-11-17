@@ -56,8 +56,9 @@ curl -X POST http://localhost:3000/api/seed   # تعبئة 25 تصنيف + 32 م
 | PATCH | `/api/products/[id]` | تعديل منتج؛ تمرير `sizeStock:[{size,stock}]` يضبط رصيد كل مقاس ويجعل `stock` = مجموعها. تعديل `stock` وحده يوزّع الفرق على المقاسات. `costPrice` (سعر التكلفة) مقبول هنا وللإدارة فقط |
 | GET | `/api/admin/stats` | بطاقات تشمل `profit` (ربح تقديري 30 يوماً بعد خصم المسترجع) و`marginPct` — يُحسبان من لقطة تكلفة وقت البيع |
 | POST | `/api/coupons/validate` | `{code, subtotal, phone?}` → `{valid, discount, message}` — يفحص حد الاستخدام و«مرة واحدة لكل زبون» عند تمرير الهاتف |
-| GET/POST/PATCH/DELETE | `/api/coupons` | إدارة الكوبونات: `maxUses` (حد كلي)، `oncePerCustomer` (مرة لكل زبون)، تفعيل/إيقاف |
+| GET/POST/PATCH/DELETE | `/api/coupons` | إدارة الكوبونات: `maxUses` (حد كلي)، `oncePerCustomer` (مرة لكل زبون)، `expiresAt`، تفعيل/إيقاف |
 | GET/PATCH | `/api/delivery` | رسوم التوصيل لكل محافظة |
+| GET | `/api/track` | بجلسة OTP: كل طلبات الزبون مع `events`. بلا جلسة: `?phone=&code=` ورد مخفّف فيه `history` (حالة وتاريخ فقط) بلا اسم أو عنوان أو إجمالي |
 
 ### المصادقة
 - `POST /api/auth/otp {action:'send', phone}` — يرسل SMS. في التطوير (أو `OTP_DEV_ECHO=1`) يرجع `devCode`؛ في الإنتاج بلا مزود SMS يرجع 503 ولا يكشف الرمز.
