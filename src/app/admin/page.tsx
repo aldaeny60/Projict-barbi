@@ -87,6 +87,17 @@ export default function AdminPage() {
     if (authed) fetch("/api/admin/stats").then((r) => (r.ok ? r.json() : null)).then((d) => d && setStats(d)).catch(() => {});
   }, [authed]);
 
+  // دور الجلسة الحالية بعد إعادة التحميل (مالك/مدير) — يحدد ظهور تبويب الحسابات
+  useEffect(() => {
+    if (!authed) return;
+    fetch("/api/admin/users")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.role) setAdminRole(d.role === "manager" ? "manager" : "owner");
+      })
+      .catch(() => {});
+  }, [authed]);
+
   const doLogin = async () => {
     setPinError("");
     const r = await fetch("/api/admin/login", {
