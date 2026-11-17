@@ -1,9 +1,9 @@
 import { db } from "@/db";
 import { categories, products } from "@/db/schema";
-import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { toProductDTO } from "@/lib/dto";
-import { arabicVariants } from "@/lib/arabic";
+import { arabicLike } from "@/lib/arabic";
 import { sizeStockMap, distributeStock, replaceSizeStock } from "@/lib/stock";
 import { adminUnauthorized, isAdminAuthed } from "@/lib/admin-auth";
 import { adminActor, logAudit } from "@/lib/audit";
@@ -38,13 +38,8 @@ export async function GET(req: NextRequest) {
     if (cat) conds.push(eq(products.categoryId, cat.id));
   }
   if (q) {
-    // كل صيغ الكلمة العربية (همزات/تاء مربوطة/ياء) — لا تفشل مع أول اختلاف إملائي
-    const variants = arabicVariants(q);
-    conds.push(
-      or(
-        ...variants.flatMap((v) => [ilike(products.name, `%${v}%`), ilike(products.description, `%${v}%`)])
-      )
-    );
+    // تطبيع عربي على طرفي المقارنة (همزات/تاء مربوطة/تشكيل) — لا مطابقة حرفية
+    conds.push(or(arabicLike(products.name, q), arabicLike(products.description, q)));
   }
   if (deals) conds.push(isNotNull(products.compareAtPrice));
   if (isNew) conds.push(eq(products.isNew, true));

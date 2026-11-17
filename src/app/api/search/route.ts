@@ -1,16 +1,14 @@
 import { db } from "@/db";
 import { products } from "@/db/schema";
-import { ilike, or } from "drizzle-orm";
+import { or } from "drizzle-orm";
 import type { NextRequest } from "next/server";
-import { arabicVariants } from "@/lib/arabic";
+import { arabicLike } from "@/lib/arabic";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim();
   if (!q || q.length < 2) return Response.json({ suggestions: [] });
-  const variants = arabicVariants(q);
-  if (!variants.length) return Response.json({ suggestions: [] });
   const rows = await db
     .select({
       id: products.id,
@@ -21,11 +19,7 @@ export async function GET(req: NextRequest) {
       images: products.images,
     })
     .from(products)
-    .where(
-      or(
-        ...variants.flatMap((v) => [ilike(products.name, `%${v}%`), ilike(products.description, `%${v}%`)])
-      )
-    )
+    .where(or(arabicLike(products.name, q), arabicLike(products.description, q)))
     .limit(7);
   return Response.json({
     suggestions: rows.map((r) => ({
