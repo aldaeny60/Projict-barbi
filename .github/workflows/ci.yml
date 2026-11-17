@@ -25,8 +25,11 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/app_db
       NEXT_PUBLIC_BASE_URL: http://127.0.0.1:3000
-      ADMIN_PIN: "2024"
-      ADMIN_SESSION_SECRET: ci-only-session-secret
+      # رمز غير افتراضي + أسرار جلسات: الخادم يرفض الإقلاع بلاها في الإنتاج
+      ADMIN_PIN: "482913"
+      ADMIN_SESSION_SECRET: ci-only-session-secret-0123456789
+      CUSTOMER_SESSION_SECRET: ci-customer-session-secret-0123456789
+      STAFF_SESSION_SECRET: ci-staff-session-secret-0123456789
       OTP_DEV_ECHO: "1"
     steps:
       - uses: actions/checkout@v4

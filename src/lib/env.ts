@@ -93,3 +93,46 @@ export function envWarnings(): string[] {
   }
   return warnings;
 }
+
+/**
+ * تحقق إقلاع: في الإنتاج (وخارج وضع العرض) يرفض التشغيل برمز الإدارة الافتراضي
+ * أو بلا أسرار جلسات — لأن ذلك يعني لوحة تحكم برمز معروف وجلسات قابلة للتزوير.
+ * في وضع العرض يكتفي بإشعار واضح (بيانات توضيحية فقط).
+ */
+export function assertRuntimeConfig(): void {
+  if (env.demoMode) {
+    console.log("[env] وضع العرض التجريبي: قاعدة مؤقتة وبيانات توضيحية — لوحة التحكم /admin برمز 2024");
+    return;
+  }
+
+  // في التطوير نكتفي بالتحذيرات حتى لا يتعطّل `npm run dev` بلا .env
+  if (!env.isProd) {
+    const devWarnings = envWarnings();
+    if (devWarnings.length) console.warn(`[env] تحذيرات التطوير: ${devWarnings.join(" | ")}`);
+    return;
+  }
+
+  const problems: string[] = [];
+  if (!read("ADMIN_PIN")) problems.push("ADMIN_PIN غير مضبوط (يُمنع الرمز الافتراضي 2024 في الإنتاج)");
+  else if (read("ADMIN_PIN") === "2024") problems.push("ADMIN_PIN ما زال 2024 — غيّره قبل التشغيل");
+  for (const kind of ["admin", "customer", "staff"] as SessionKind[]) {
+    if (!read(SECRET_ENV[kind])) problems.push(`${SECRET_ENV[kind]} غير مضبوط`);
+  }
+
+  if (problems.length) {
+    const message =
+      "تهيئة غير مكتملة — رفض الإقلاع:\n- " +
+      problems.join("\n- ") +
+      "\nراجع .env.example، أو شغّل بوضع العرض (بلا DATABASE_URL).";
+    console.error(message);
+    throw new Error(message);
+  }
+
+  if (!read("NEXT_PUBLIC_BASE_URL")) {
+    console.warn("[env] NEXT_PUBLIC_BASE_URL غير مضبوط — روابط sitemap ستكون محلية");
+  }
+  if (!env.sms.configured) {
+    console.warn("[env] مزود SMS غير مهيّأ — OTP والإشعارات ستُرجع skipped");
+  }
+  console.log("[env] التهيئة مكتملة: قاعدة بيانات، رمز إدارة، وأسرار جلسات مضبوطة");
+}

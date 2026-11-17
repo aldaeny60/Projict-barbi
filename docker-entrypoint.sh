@@ -13,6 +13,8 @@ fi
 echo "→ وضع العرض التجريبي: قاعدة PostgreSQL مؤقتة داخل الحاوية"
 export DEMO_MODE=1
 export DATABASE_URL="postgresql://postgres@127.0.0.1:5432/barbi"
+# رمز معروف ومقصود لنسخة العرض فقط (بيانات توضيحية تُصفَّر مع الحاوية)
+export ADMIN_PIN="${ADMIN_PIN:-2024}"
 
 PGDATA=/tmp/barbi-pg
 mkdir -p "$PGDATA" /run/postgresql

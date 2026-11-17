@@ -2,7 +2,10 @@
 /**
  * BARBI — اختبارات سير العمل الحرجة (LAW 015: لا سير عمل حرجاً بدون اختبار)
  * تشغيل: node scripts/api-tests.mjs   (يتطلب خادماً يعمل على BASE_URL)
+ * يقرأ .env المحلي تلقائياً (ADMIN_PIN) إن وُجد — ومتغيرات البيئة المضبوطة تبقى أولى.
  */
+import "dotenv/config";
+
 const BASE = process.env.BASE_URL || "http://127.0.0.1:3000";
 const ADMIN_PIN = process.env.ADMIN_PIN || "2024";
 // أرقام عشوائية صالحة لكل تشغيل — تعزل الاختبار عن حدود المعدل وعمليات التشغيل السابقة

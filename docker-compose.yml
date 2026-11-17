@@ -28,7 +28,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-app_db}
       NODE_ENV: production
       NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
-      ADMIN_PIN: ${ADMIN_PIN:?ADMIN_PIN مطلوب}
+      ADMIN_PIN: ${ADMIN_PIN:?ADMIN_PIN مطلوب — لا تستخدم 2024 في الإنتاج}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?ADMIN_SESSION_SECRET مطلوب}
       CUSTOMER_SESSION_SECRET: ${CUSTOMER_SESSION_SECRET:-}
       STAFF_SESSION_SECRET: ${STAFF_SESSION_SECRET:-}

@@ -39,6 +39,7 @@ curl -X POST http://localhost:3000/api/seed   # بذر البيانات: منت�
 - **قاعدة البيانات**: `DATABASE_URL` (+ `DEMO_MODE` يضبطه الحاوية تلقائياً في وضع العرض).
 - **هوية المتجر العامة**: `NEXT_PUBLIC_BASE_URL` / `NEXT_PUBLIC_SUPPORT_PHONE` / `NEXT_PUBLIC_WHATSAPP_PHONE`.
 - **الجلسات**: `ADMIN_PIN` و`ADMIN_SESSION_SECRET` و`CUSTOMER_SESSION_SECRET` و`STAFF_SESSION_SECRET` — وفي الإنتاج بلا سرّ يُولَّد سر عشوائي مؤقت لكل عملية (الجلسات تُبطل مع إعادة التشغيل) بدل الرجوع لسر معروف يمكن تزوير الكوكي به.
+- **تحقق الإقلاع**: في الإنتاج يرفض الخادم العمل إذا كان `ADMIN_PIN` فارغاً أو `2024` أو نقص أي سر جلسات (`src/lib/env.ts` + `src/instrumentation.ts`). فحص سريع قبل التشغيل: `npm run env:check`. وضع العرض (`DEMO_MODE=1`) مستثنى لأنه بيانات توضيحية فقط.
 - **الإشعارات**: `SMS_PROVIDER_URL` / `SMS_PROVIDER_API_KEY` / `SMS_SENDER_ID`، و`OTP_DEV_ECHO` للتطوير فقط.
 - **حد المعدل**: `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`.
 - **رصد السوق**: `SERPER_API_KEY`.
